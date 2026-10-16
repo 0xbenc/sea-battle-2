@@ -154,3 +154,15 @@ Art presentation follows these additive principles:
   simulation requirements; the early uncertainty is the visual direction, where
   his taste and art direction matter most. The presentation establishes the target
   for the underlying systems to grow into.
+
+## Single player
+
+Press **S**, then **A** for the American navy or **B** for the brood. The bot
+commands the other fleet, using only revealed shot results. No networking setup
+or connection is needed. Deploy manually or press **R**, then **Space** to ready.
+Both factions use the existing rules, consoles and skippable shot cinematics.
+
+`./bin/sea-battle --solo american` or `--solo alien` starts deployment directly.
+**R** after the result starts a rematch with the opening turn alternated.
+**Esc** returns to the menu; unfinished matches ask before discarding progress.
+See [single-player design and validation](design/SINGLE_PLAYER.md).

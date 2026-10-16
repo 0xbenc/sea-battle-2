@@ -206,3 +206,78 @@ func TestRepeatedEnterDoesNotQueueMultipleShots(t *testing.T) {
 		}
 	}
 }
+
+func TestSoloMenusAndPresentation(t *testing.T) {
+	for _, human := range []int{0, 1} {
+		m, cleanup := New(Options{})
+		m.width, m.height = 80, 24
+		m = apply(m, key("s"))
+		if m.mode != "faction" {
+			t.Fatal("missing faction picker")
+		}
+		k := "a"
+		if human == 1 {
+			k = "b"
+		}
+		m = apply(m, key(k))
+		for m.state == nil {
+			e, ok := m.session.Next()
+			if !ok {
+				t.Fatal("closed")
+			}
+			m = apply(m, e)
+		}
+		if !m.solo || m.host || m.invitation || m.offline || m.state.Player != human {
+			t.Fatal("solo presentation incorrectly configured")
+		}
+		m = apply(m, key("r"))
+		next, cmd := m.Update(key("space"))
+		m = next.(Model)
+		if cmd == nil {
+			t.Fatal("fleet not submitted")
+		}
+		m = apply(m, cmd())
+		e, _ := m.session.Next()
+		m = apply(m, e)
+		if m.state.Phase != "battle" || m.state.Turn != human {
+			t.Fatal("wrong initial turn")
+		}
+		// A bot response arriving during our shot must queue, not overwrite it.
+		next, cmd = m.Update(key("enter"))
+		m = next.(Model)
+		m = apply(m, cmd())
+		e, _ = m.session.Next()
+		m = apply(m, e)
+		e, _ = m.session.Next()
+		m = apply(m, e)
+		if len(m.clips) != 2 || m.clips[0].Player != human || m.clips[1].Player == human {
+			t.Fatal("cinematic ordering")
+		}
+		m = apply(m, key("space"))
+		m = apply(m, key("space"))
+		if len(m.clips) != 0 || m.state.Turn != human {
+			t.Fatal("skip lost turn")
+		}
+		m = apply(m, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+		if !m.quitting || !m.returnMenu {
+			t.Fatal("no discard confirmation")
+		}
+		m = apply(m, key("n"))
+		if m.quitting || m.returnMenu {
+			t.Fatal("cancel left confirmation active")
+		}
+		cleanup()
+	}
+}
+
+func TestStoppedSoloDoesNotDismissNewFactionPicker(t *testing.T) {
+	m, cleanup := New(Options{})
+	defer cleanup()
+	m.width, m.height = 80, 24
+	m.session.Stop()
+	m = apply(m, key("s"))
+	m = apply(m, session.Event{Generation: m.session.Generation(), State: session.Stopped})
+	if m.mode != "faction" {
+		t.Fatal("late stop dismissed new selection")
+	}
+}

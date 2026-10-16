@@ -19,5 +19,6 @@ hardening:
 	go test ./internal/peer -run '^$$' -fuzz '^FuzzWireMessages$$' -fuzztime=100000x -parallel=2
 	go test ./internal/peer -run '^$$' -fuzz '^FuzzCommandsPreserveRules$$' -fuzztime=100000x -parallel=2
 test-terminal: build
+	uv run --with pillow --with pyte tools/solo_pty_review.py
 	uv run --with pillow --with pyte tools/play_pty_review.py
 	uv run --with pillow --with pyte tools/pty_review.py

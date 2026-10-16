@@ -9,15 +9,15 @@ import (
 
 // BattlePresentation carries only a player's filtered view, never the host Game.
 type BattlePresentation struct {
-	State                   game.View
-	Fleet                   []game.Placement
-	Cursor                  game.Coord
-	Selected                int
-	Horizontal, SD, Pending bool
-	T                       float64
-	Notice                  string
-	Clip                    *game.Event
-	ClipTime                float64
+	State                         game.View
+	Fleet                         []game.Placement
+	Cursor                        game.Coord
+	Selected                      int
+	Horizontal, SD, Pending, Solo bool
+	T                             float64
+	Notice                        string
+	Clip                          *game.Event
+	ClipTime                      float64
 }
 
 func RenderBattle(b BattlePresentation) *Frame {
@@ -67,6 +67,9 @@ func RenderBattle(b BattlePresentation) *Frame {
 		}
 		line := fmt.Sprintf("TARGET %s  /  SHOT %03d", b.Cursor, len(v.Events)+1)
 		status := "WAITING FOR OPPONENT"
+		if b.Solo {
+			status = "ENEMY DIRECTOR / CALCULATING"
+		}
 		if v.Phase == "placement" {
 			if v.Ready[v.Player] {
 				line = "FLEET LOCKED"
@@ -81,6 +84,9 @@ func RenderBattle(b BattlePresentation) *Frame {
 				line = "VICTORY / OCEAN LIBERATED"
 			}
 			status = "R request rematch"
+			if b.Solo {
+				status = "R rematch   ESC command menu"
+			}
 			if v.Rematch[v.Player] {
 				status = "Rematch requested. Waiting for opponent."
 			}
@@ -92,6 +98,9 @@ func RenderBattle(b BattlePresentation) *Frame {
 		}
 		if b.Pending {
 			status = "AWAITING HOST ACKNOWLEDGEMENT"
+			if b.Solo {
+				status = "COMMAND RECEIVED"
+			}
 		}
 		r.text(xx, y+1, short(line, w-xx-4), Bone)
 		r.text(xx, y+3, short(status, w-xx-4), accent)
@@ -136,6 +145,9 @@ func RenderBattle(b BattlePresentation) *Frame {
 	if v.Player == 1 {
 		team = "B / THE BROOD"
 	}
+	if b.Solo {
+		team += " / SOLO"
+	}
 	r.text(2, 1, fmt.Sprintf("%s  /  MATCH %d  /  %s", team, v.Match, strings.ToUpper(v.Phase)), accent)
 	r.plaque(0, h-2, w, 2, Ink)
 	help := "ARROWS/WASD aim  ENTER fire  I invitation  F2 size  Q quit"
@@ -144,6 +156,12 @@ func RenderBattle(b BattlePresentation) *Frame {
 	}
 	if b.Clip != nil {
 		help = "SPACE/ENTER skip transmission   I invitation   Q quit"
+	}
+	if b.Solo {
+		help = strings.ReplaceAll(help, "I invitation", "ESC menu")
+		if v.Phase == "placement" {
+			help = "ARROWS move 1-5 hull ENTER place X rotate R random SPACE ready ESC menu"
+		}
 	}
 	r.text(2, h-2, short(help, w-4), Muted)
 	r.text(2, h-1, short(b.Notice, w-4), Cyan)
@@ -280,6 +298,6 @@ func RenderFront(sd bool, t float64, title string, lines []string) *Frame {
 		r.text(x+2, row, line, Bone)
 		row++
 	}
-	r.solidText(2, h-2, "SEA BATTLE 2 / DIRECT CONNECTION / NO SHARED SERVICES", Muted, Ink)
+	r.solidText(2, h-2, "SEA BATTLE 2 / NO ACCOUNTS / NO SHARED SERVICES", Muted, Ink)
 	return r.frame()
 }

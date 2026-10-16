@@ -19,6 +19,7 @@ import (
 )
 
 type Options struct {
+	Solo            string
 	Host            bool
 	Join, Advertise string
 	Port            int
@@ -33,7 +34,7 @@ type saved struct{ err error }
 type Model struct {
 	opts                                             Options
 	session                                          *session.Controller
-	running, host                                    bool
+	running, host, solo, returnMenu                  bool
 	port                                             int
 	mode                                             string
 	input, invite, notice, routerStatus              string
@@ -52,7 +53,7 @@ type Model struct {
 func New(opts Options) (Model, func()) {
 	controller := session.New(context.Background())
 	m := Model{opts: opts, session: controller, mode: "menu", preferSD: opts.SD, fleet: game.EmptyFleet()}
-	if opts.Host || opts.Join != "" {
+	if opts.Host || opts.Join != "" || opts.Solo != "" {
 		m.mode = "connecting"
 	}
 	return m, controller.Close
@@ -62,6 +63,13 @@ func tick() tea.Cmd {
 }
 func (m Model) Init() tea.Cmd {
 	commands := []tea.Cmd{tick(), m.event()}
+	if m.opts.Solo != "" {
+		human := 0
+		if m.opts.Solo == "alien" {
+			human = 1
+		}
+		commands = append(commands, m.startSolo(human))
+	}
 	if m.opts.Host {
 		commands = append(commands, m.startHost())
 	}
@@ -69,6 +77,10 @@ func (m Model) Init() tea.Cmd {
 		commands = append(commands, m.startJoin(m.opts.Join))
 	}
 	return tea.Batch(commands...)
+}
+func (m Model) startSolo(human int) tea.Cmd {
+	m.session.Start(session.Config{Solo: true, Human: human})
+	return nil
 }
 func (m Model) startHost() tea.Cmd {
 	m.session.Start(session.Config{Host: true, Port: m.opts.Port, Advertise: m.opts.Advertise, NoMap: m.opts.NoMap})
@@ -129,6 +141,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pending = false
 			m.running = false
 			m.host = false
+			m.solo = false
 			m.invitation = false
 			m.invite = ""
 			m.routerStatus = ""
@@ -138,6 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.State == session.Connecting && v.Message.Type == "" {
 			m.running = true
 			m.host = v.Host
+			m.solo = v.Solo
 			m.port = v.Port
 			m.mode = "game"
 			m.offline = true
@@ -169,7 +183,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if v.State == session.Stopped {
-			m.mode = "menu"
+			if m.mode != "faction" {
+				m.mode = "menu"
+			}
 			m.running = false
 		}
 		return m, m.event()
@@ -271,10 +287,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.quitting {
 			if k == "y" || k == "enter" {
+				if m.returnMenu {
+					m.session.Stop()
+					m.quitting = false
+					m.returnMenu = false
+					m.mode = "menu"
+					m.running = false
+					return m, nil
+				}
 				return m, tea.Quit
 			}
 			if k == "n" || k == "esc" || k == "q" {
 				m.quitting = false
+				m.returnMenu = false
 			}
 			return m, nil
 		}
@@ -283,12 +308,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			m.quitting = true
+			m.returnMenu = false
 			return m, nil
 		}
 		if k == "esc" && (m.mode == "connecting" || (m.mode == "game" && m.state == nil)) {
 			m.session.Stop()
 			m.mode = "menu"
 			m.notice = "Connection attempt cancelled."
+			return m, nil
+		}
+		if k == "esc" && m.mode == "faction" {
+			m.mode = "menu"
+			return m, nil
+		}
+		if k == "esc" && m.solo && m.mode == "game" {
+			if m.state != nil && m.state.Phase == "finished" {
+				m.session.Stop()
+				m.mode = "menu"
+				m.running = false
+				return m, nil
+			}
+			m.quitting = true
+			m.returnMenu = true
 			return m, nil
 		}
 		if k == "f2" {
@@ -300,6 +341,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.mode == "menu" {
 			switch k {
+			case "s":
+				m.mode = "faction"
+				m.notice = ""
 			case "h":
 				m.mode = "connecting"
 				return m, m.startHost()
@@ -309,7 +353,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if k == "j" && m.offline && !m.host && m.running {
+		if m.mode == "faction" {
+			if k == "a" || k == "b" {
+				human := 0
+				if k == "b" {
+					human = 1
+				}
+				m.mode = "connecting"
+				return m, m.startSolo(human)
+			}
+			return m, nil
+		}
+		if k == "j" && !m.solo && m.offline && !m.host && m.running {
 			m.mode = "rejoin"
 			m.input = ""
 			m.notice = "Paste an updated invitation from the SAME host session."
@@ -429,12 +484,17 @@ func (m Model) View() tea.View {
 	switch {
 	case m.quitting:
 		detail := "Disconnect from the battle?"
+		if m.solo {
+			detail = "Leave this battle? Progress will be lost."
+		}
 		if m.host {
 			detail = "Closing the host ends this session for both players."
 		}
 		f = visual.RenderFront(m.sd(), m.t, "LEAVE COMMAND?", []string{detail, "", "Y / ENTER leave    N / ESC return"})
 	case m.mode == "menu":
-		f = visual.RenderFront(m.sd(), m.t, "SEA BATTLE 2 / OPERATION PEST TIDE", []string{"", "H  Host a battle / American navy", "J  Join by invitation / The brood", "", "One commander hosts. The other pastes their invitation.", "No accounts. No shared servers.", "", "Lookdev remains available with --lookdev.", "", "Q quit    F2 SD / HD", "", m.notice})
+		f = visual.RenderFront(m.sd(), m.t, "SEA BATTLE 2 / OPERATION PEST TIDE", []string{"S  Single player / Choose your faction", "", "H  Host a battle / American navy", "J  Join by invitation / The brood", "", "One commander hosts. The other pastes their invitation.", "No accounts. No shared servers.", "", "Lookdev remains available with --lookdev.", "", "Q quit    F2 SD / HD", "", m.notice})
+	case m.mode == "faction":
+		f = visual.RenderFront(m.sd(), m.t, "SINGLE PLAYER / CHOOSE COMMAND", []string{"A  American navy", "   Steel hulls. Questionable diplomacy.", "", "B  The brood", "   Organic nastiness. Some assembly assimilated.", "", "The computer commands the other fleet.", "Same rules. No hidden information for the bot.", "", "A / B deploy    ESC back    F2 size    Q quit"})
 	case m.mode == "join" || m.mode == "rejoin":
 		tail := m.input
 		if len(tail) > 52 {
@@ -454,7 +514,7 @@ func (m Model) View() tea.View {
 		if m.offline {
 			v.Connected = [2]bool{}
 		}
-		b := visual.BattlePresentation{State: v, Fleet: m.fleet, Cursor: m.cursor, Selected: m.selected, Horizontal: m.horizontal, SD: m.sd(), T: m.t, Notice: m.notice, Pending: m.pending}
+		b := visual.BattlePresentation{State: v, Fleet: m.fleet, Cursor: m.cursor, Selected: m.selected, Horizontal: m.horizontal, SD: m.sd(), T: m.t, Notice: m.notice, Pending: m.pending, Solo: m.solo}
 		if len(m.clips) > 0 {
 			b.Clip = &m.clips[0]
 			b.ClipTime = m.clipTime

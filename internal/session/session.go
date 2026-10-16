@@ -1,4 +1,4 @@
-// Package session owns the entire lifetime of a direct multiplayer session.
+// Package session owns the entire lifetime of local and direct multiplayer sessions.
 // Presentation consumes generation-tagged events; it never owns network resources.
 package session
 
@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"sea-battle-2/internal/game"
 	"sea-battle-2/internal/netsetup"
 	"sea-battle-2/internal/peer"
 )
@@ -31,6 +32,8 @@ const (
 )
 
 type Config struct {
+	Solo            bool
+	Human           int
 	Host            bool
 	Join, Advertise string
 	Port            int
@@ -40,6 +43,7 @@ type Event struct {
 	Generation uint64
 	State      State
 	Message    peer.Message
+	Solo       bool
 	Host       bool
 	Port       int
 	Invitation string
@@ -51,7 +55,8 @@ type operation struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	done       chan struct{}
-	client     *peer.Client // guarded by Controller.mu
+	client     *peer.Client      // guarded by Controller.mu
+	local      chan localCommand // installed under Controller.mu before publication
 }
 type dependencies struct {
 	host      func(string) (*peer.Server, error)
@@ -59,6 +64,7 @@ type dependencies struct {
 	maintain  func(context.Context, int, func(netsetup.Update))
 	addresses func(int) []string
 	refresh   time.Duration
+	botDelay  time.Duration
 }
 type Controller struct {
 	mu         sync.Mutex
@@ -77,7 +83,7 @@ type Controller struct {
 func New(parent context.Context) *Controller {
 	ctx, cancel := context.WithCancel(parent)
 	return &Controller{ctx: ctx, cancel: cancel, events: make(chan Event, 64), state: Idle,
-		deps: dependencies{host: peer.Host, connect: peer.Connect, maintain: netsetup.Maintain, addresses: peer.LocalAddresses, refresh: 10 * time.Second}}
+		deps: dependencies{host: peer.Host, connect: peer.Connect, maintain: netsetup.Maintain, addresses: peer.LocalAddresses, refresh: 10 * time.Second, botDelay: 650 * time.Millisecond}}
 }
 func (c *Controller) Generation() uint64 { c.mu.Lock(); defer c.mu.Unlock(); return c.generation }
 func (c *Controller) State() State       { c.mu.Lock(); defer c.mu.Unlock(); return c.state }
@@ -174,11 +180,30 @@ func (c *Controller) Send(generation uint64, cmd peer.Command) error {
 func (c *Controller) Prepare(generation uint64, cmd peer.Command) func() error {
 	c.mu.Lock()
 	op := c.tail
-	if c.closed || op == nil || op.generation != generation || op.ctx.Err() != nil || op.client == nil {
+	if c.closed || op == nil || op.generation != generation || op.ctx.Err() != nil || (op.client == nil && op.local == nil) {
 		c.mu.Unlock()
 		return func() error { return errors.New("session changed or is not connected") }
 	}
-	execute := op.client.Prepare(cmd)
+	var execute func() error
+	if op.local != nil {
+		cmd.Fleet = append([]game.Placement(nil), cmd.Fleet...)
+		execute = func() error {
+			request := localCommand{command: cmd, result: make(chan error, 1)}
+			select {
+			case op.local <- request:
+			case <-op.ctx.Done():
+				return errors.New("session ended")
+			}
+			select {
+			case err := <-request.result:
+				return err
+			case <-op.ctx.Done():
+				return errors.New("session ended")
+			}
+		}
+	} else {
+		execute = op.client.Prepare(cmd)
+	}
 	c.mu.Unlock()
 	return func() error {
 		c.mu.Lock()
@@ -208,6 +233,14 @@ func (c *Controller) UpdateInvitation(generation uint64, code string) error {
 func (c *Controller) run(op *operation, config Config) {
 	fail := func(err error) { c.publish(op, Event{State: Failed, Error: err.Error()}) }
 	c.publish(op, Event{State: Starting})
+	if config.Solo {
+		if config.Host || config.Join != "" || config.Human < 0 || config.Human > 1 {
+			fail(errors.New("choose a valid solo faction without host or join"))
+			return
+		}
+		c.runLocal(op, config.Human)
+		return
+	}
 	if config.Port < 0 || config.Port > 65535 {
 		fail(errors.New("port must be 0-65535"))
 		return

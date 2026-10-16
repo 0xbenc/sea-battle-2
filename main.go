@@ -239,6 +239,7 @@ func saveCapture(s visual.State) error {
 }
 func run() error {
 	lookdev := flag.Bool("lookdev", false, "open the scripted art review")
+	solo := flag.String("solo", "", "single player faction: american or alien")
 	host := flag.Bool("host", false, "host a direct battle as the American navy")
 	join := flag.String("join", "", "join with a private sb2: invitation")
 	joinFile := flag.String("join-file", "", "read an invitation from a file")
@@ -279,6 +280,12 @@ func run() error {
 		}
 		*join = string(b)
 	}
+	if *solo != "" && *solo != "american" && *solo != "alien" {
+		return fmt.Errorf("solo must be american or alien")
+	}
+	if *solo != "" && (*host || *join != "" || *advertise != "") {
+		return fmt.Errorf("choose solo or multiplayer")
+	}
 	if *host && *join != "" {
 		return fmt.Errorf("choose host or join")
 	}
@@ -289,7 +296,7 @@ func run() error {
 			artMode = true
 		}
 	})
-	if artMode && (*host || *join != "") {
+	if artMode && (*host || *join != "" || *solo != "") {
 		return fmt.Errorf("lookdev and a live battle are separate modes")
 	}
 	if *size != "hd" && *size != "sd" {
@@ -301,7 +308,7 @@ func run() error {
 				return err
 			}
 		}
-		m, cleanup := play.New(play.Options{Host: *host, Join: *join, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"})
+		m, cleanup := play.New(play.Options{Solo: *solo, Host: *host, Join: *join, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"})
 		defer cleanup()
 		_, err := tea.NewProgram(m, tea.WithColorProfile(colorprofile.TrueColor)).Run()
 		return err
