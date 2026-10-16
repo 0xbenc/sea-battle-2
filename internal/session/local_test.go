@@ -19,48 +19,50 @@ func localView(t *testing.T, c *Controller) game.View {
 	return *e.Message.View
 }
 func TestSoloFullMatchesBothFactionsAndRematches(t *testing.T) {
-	for human := 0; human < 2; human++ {
-		c := New(context.Background())
-		c.deps.botDelay = 0
-		c.deps.host = func(string) (*peer.Server, error) { t.Fatal("solo opened network host"); return nil, nil }
-		gen := c.Start(Config{Solo: true, Human: human})
-		rng := rand.New(rand.NewPCG(21, 33))
-		for match := 1; match <= 12; match++ {
-			v := localView(t, c)
-			if v.Player != human || v.Match != match || !v.Ready[1-human] || v.Ready[human] || v.Turn != (human+match-1)%2 {
-				t.Fatalf("bad deployment: %+v", v)
-			}
-			if err := c.Send(gen, peer.Command{Type: "ready", Match: match, Fleet: game.RandomFleet(uint64(match))}); err != nil {
-				t.Fatal(err)
-			}
-			v = localView(t, c)
-			for v.Phase == "battle" {
-				if v.Turn == human {
-					at, ok := bot.Choose(bot.Observe(v), rng)
-					if !ok {
-						t.Fatal("no human target")
-					}
-					cmd := peer.Command{Type: "fire", Match: match, Expected: len(v.Events), At: at}
-					if err := c.Send(gen, cmd); err != nil {
-						t.Fatal(err)
-					}
-					if err := c.Send(gen, cmd); err == nil {
-						t.Fatal("repeated shot accepted")
-					}
+	for _, difficulty := range []bot.Difficulty{bot.Easy, bot.Medium, bot.Hard} {
+		for human := 0; human < 2; human++ {
+			c := New(context.Background())
+			c.deps.botDelay = 0
+			c.deps.host = func(string) (*peer.Server, error) { t.Fatal("solo opened network host"); return nil, nil }
+			gen := c.Start(Config{Solo: true, Human: human, Difficulty: difficulty})
+			rng := rand.New(rand.NewPCG(21, 33))
+			for match := 1; match <= 4; match++ {
+				v := localView(t, c)
+				if v.Player != human || v.Match != match || !v.Ready[1-human] || v.Ready[human] || v.Turn != (human+match-1)%2 {
+					t.Fatalf("bad deployment: %+v", v)
+				}
+				if err := c.Send(gen, peer.Command{Type: "ready", Match: match, Fleet: game.RandomFleet(uint64(match))}); err != nil {
+					t.Fatal(err)
 				}
 				v = localView(t, c)
+				for v.Phase == "battle" {
+					if v.Turn == human {
+						at, ok := bot.Choose(bot.Observe(v), rng)
+						if !ok {
+							t.Fatal("no human target")
+						}
+						cmd := peer.Command{Type: "fire", Match: match, Expected: len(v.Events), At: at}
+						if err := c.Send(gen, cmd); err != nil {
+							t.Fatal(err)
+						}
+						if err := c.Send(gen, cmd); err == nil {
+							t.Fatal("repeated shot accepted")
+						}
+					}
+					v = localView(t, c)
+				}
+				if v.Phase != "finished" || v.Winner < 0 || len(v.Events) > 199 {
+					t.Fatal("bad result")
+				}
+				if err := c.Send(gen, peer.Command{Type: "rematch", Match: match}); err != nil {
+					t.Fatal(err)
+				}
+				if err := c.Send(gen, peer.Command{Type: "rematch", Match: match}); err == nil {
+					t.Fatal("stale match accepted")
+				}
 			}
-			if v.Phase != "finished" || v.Winner < 0 || len(v.Events) > 199 {
-				t.Fatal("bad result")
-			}
-			if err := c.Send(gen, peer.Command{Type: "rematch", Match: match}); err != nil {
-				t.Fatal(err)
-			}
-			if err := c.Send(gen, peer.Command{Type: "rematch", Match: match}); err == nil {
-				t.Fatal("stale match accepted")
-			}
+			c.Close()
 		}
-		c.Close()
 	}
 }
 func TestSoloCancellationAndPreparedCommand(t *testing.T) {
@@ -91,5 +93,15 @@ func TestSoloCancellationAndPreparedCommand(t *testing.T) {
 	}
 	if err := prepared(); err == nil {
 		t.Fatal("prepared command crossed generations")
+	}
+}
+
+func TestSoloRejectsUnknownDifficulty(t *testing.T) {
+	c := New(context.Background())
+	defer c.Close()
+	c.Start(Config{Solo: true, Difficulty: "impossible"})
+	e := await(t, c, func(e Event) bool { return e.State == Failed })
+	if e.Error != "difficulty must be easy, medium or hard" {
+		t.Fatal(e.Error)
 	}
 }

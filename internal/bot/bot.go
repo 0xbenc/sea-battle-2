@@ -54,10 +54,26 @@ func Choose(k Knowledge, rng *rand.Rand) (game.Coord, bool) {
 		}
 	}
 	scores := hunt
+	targeting := false
 	for _, score := range target {
 		if score > 0 {
 			scores = target
+			targeting = true
 			break
+		}
+	}
+	if !targeting {
+		// Search among plausible squares; eliminate cells no remaining hull can
+		// occupy. Systematic coverage and fleet-wide probability belong to Hard.
+		choices := []int{}
+		for i, m := range k.Shots {
+			if m == game.Unknown && hunt[i] > 0 {
+				choices = append(choices, i)
+			}
+		}
+		if len(choices) > 0 {
+			n := choices[rng.IntN(len(choices))]
+			return game.Coord{X: n % 10, Y: n / 10}, true
 		}
 	}
 	best, choices := -1, []int{}

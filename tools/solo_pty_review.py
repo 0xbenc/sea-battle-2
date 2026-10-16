@@ -21,13 +21,18 @@ def main():
                     check('Single player' in t.read(),f'{faction} {hd}: menu entry')
                     t.key('s')
                     check('CHOOSE COMMAND' in t.read(),'Faction selection')
+                    difficulty='hard' if hd else 'easy'
+                    t.key('3' if hd else '1')
+                    check('Difficulty: '+difficulty.upper() in t.read(),'Difficulty selection')
                     t.key('a' if faction=='american' else 'b')
                     check(label in t.read(.5) and 'SOLO' in t.read(),'Correct faction deployment')
                     t.key('r');t.key(' ')
                     check('YOUR TURN' in t.read(),'Human opens first match')
                     t.key('\r')
                     t.read(.8)
-                    t.key(' ');t.key(' ')
+                    t.key(' ')
+                    check('ENEMY TURN' in t.read(.1),'Visible enemy handoff')
+                    t.read(.8);t.key(' ')
                     text=t.read()
                     check('SHOT 003' in text and 'YOUR TURN' in text,'Bot responds exactly once and returns turn')
                     check('I invitation' not in text,'Solo controls omit invitation')
@@ -40,10 +45,10 @@ def main():
                     check('Single player' in t.read(),'Return to command menu')
                     t.stop();checks.append('Terminal attributes restored')
                 finally:t.close()
-        for faction in ['american','alien']:
-            t=Terminal(['--solo',faction],Path(temp))
+        for faction,difficulty in [('american','easy'),('american','medium'),('american','hard'),('alien','easy'),('alien','medium'),('alien','hard')]:
+            t=Terminal(['--solo',faction,'--difficulty',difficulty],Path(temp))
             try:
-                check('SOLO' in t.read(.7),f'CLI starts {faction}')
+                check('SOLO '+difficulty.upper() in t.read(.7),f'CLI starts {faction} {difficulty}')
                 t.stop()
             finally:t.close()
     (ROOT/'captures/solo-pty-review.json').write_text(json.dumps({'checks':checks},indent=2)+'\n')

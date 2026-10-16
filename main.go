@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sea-battle-2/internal/bot"
 	"sea-battle-2/internal/peer"
 	"sea-battle-2/internal/play"
 	"sea-battle-2/internal/visual"
@@ -239,6 +240,7 @@ func saveCapture(s visual.State) error {
 }
 func run() error {
 	lookdev := flag.Bool("lookdev", false, "open the scripted art review")
+	difficulty := flag.String("difficulty", "medium", "solo bot: easy, medium or hard")
 	solo := flag.String("solo", "", "single player faction: american or alien")
 	host := flag.Bool("host", false, "host a direct battle as the American navy")
 	join := flag.String("join", "", "join with a private sb2: invitation")
@@ -280,6 +282,9 @@ func run() error {
 		}
 		*join = string(b)
 	}
+	if !bot.Difficulty(*difficulty).Valid() {
+		return fmt.Errorf("difficulty must be easy, medium or hard")
+	}
 	if *solo != "" && *solo != "american" && *solo != "alien" {
 		return fmt.Errorf("solo must be american or alien")
 	}
@@ -308,7 +313,7 @@ func run() error {
 				return err
 			}
 		}
-		m, cleanup := play.New(play.Options{Solo: *solo, Host: *host, Join: *join, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"})
+		m, cleanup := play.New(play.Options{Difficulty: bot.Difficulty(*difficulty), Solo: *solo, Host: *host, Join: *join, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"})
 		defer cleanup()
 		_, err := tea.NewProgram(m, tea.WithColorProfile(colorprofile.TrueColor)).Run()
 		return err

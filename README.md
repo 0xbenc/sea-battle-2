@@ -157,12 +157,17 @@ Art presentation follows these additive principles:
 
 ## Single player
 
-Press **S**, then **A** for the American navy or **B** for the brood. The bot
+Press **S**, choose **1 Easy / 2 Medium / 3 Hard**, then **A** for the American
+navy or **B** for the brood. Medium is the default. The bot
 commands the other fleet, using only revealed shot results. No networking setup
 or connection is needed. Deploy manually or press **R**, then **Space** to ready.
 Both factions use the existing rules, consoles and skippable shot cinematics.
 
-`./bin/sea-battle --solo american` or `--solo alien` starts deployment directly.
+`./bin/sea-battle --solo american --difficulty hard` starts deployment directly;
+use `--solo alien` for the brood. Easy follows hits without sophisticated search;
+Medium eliminates impossible targets and follows aligned hits; Hard infers complete
+fleets, searches systematically and solves small endgames.
+All three play fairly, and shot playback reveals board changes in sequence.
 **R** after the result starts a rematch with the opening turn alternated.
 **Esc** returns to the menu; unfinished matches ask before discarding progress.
 See [single-player design and validation](design/SINGLE_PLAYER.md).

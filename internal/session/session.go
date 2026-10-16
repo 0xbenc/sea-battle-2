@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"sea-battle-2/internal/bot"
 	"sea-battle-2/internal/game"
 	"sea-battle-2/internal/netsetup"
 	"sea-battle-2/internal/peer"
@@ -32,6 +33,7 @@ const (
 )
 
 type Config struct {
+	Difficulty      bot.Difficulty
 	Solo            bool
 	Human           int
 	Host            bool
@@ -238,7 +240,11 @@ func (c *Controller) run(op *operation, config Config) {
 			fail(errors.New("choose a valid solo faction without host or join"))
 			return
 		}
-		c.runLocal(op, config.Human)
+		if !config.Difficulty.Default().Valid() {
+			fail(errors.New("difficulty must be easy, medium or hard"))
+			return
+		}
+		c.runLocal(op, config.Human, config.Difficulty.Default())
 		return
 	}
 	if config.Port < 0 || config.Port > 65535 {

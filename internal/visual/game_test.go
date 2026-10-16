@@ -73,3 +73,49 @@ func capture(t *testing.T, f *Frame, name string, sd bool, player int) {
 		t.Fatal(err)
 	}
 }
+
+func TestReadableShotChartsAndHandoff(t *testing.T) {
+	for _, sd := range []bool{true, false} {
+		for player := 0; player < 2; player++ {
+			v := game.New(player).View(player)
+			v.Phase = "battle"
+			v.Connected = [2]bool{true, true}
+			v.Outgoing[31] = game.Miss
+			v.Outgoing[32] = game.Hit
+			v.Outgoing[99] = game.Miss
+			v.Incoming[40] = game.Miss
+			b := BattlePresentation{State: v, SD: sd, Solo: true, Cursor: game.Coord{X: 1, Y: 3}}
+			f := RenderBattle(b)
+			if !strings.Contains(f.Plain(), "B4 = column B, row 4") {
+				t.Fatal("coordinate guide missing")
+			}
+			x, y, cw, ch := 92, 18, 6, 4
+			if sd {
+				x, y, cw, ch = 45, 10, 3, 2
+			}
+			cell := f.Cells[(y/2+3*ch/2+ch/4)*f.W+x+cw+cw/2]
+			if cell.Ch != "O" {
+				t.Fatal("miss not centered in B4", cell)
+			}
+			if f.Cells[(y/2-1)*f.W+x+cw+cw/2].BG != Gold {
+				t.Fatal("column not highlighted")
+			}
+			capture(t, f, "readable-chart", sd, player)
+			e := game.Event{Player: 1 - player, At: game.Coord{X: 1, Y: 3}, Ship: -1}
+			b.Clip = &e
+			b.Handoff = true
+			f = RenderBattle(b)
+			if !strings.Contains(f.Plain(), "ENEMY TURN") {
+				t.Fatal("handoff missing")
+			}
+			capture(t, f, "handoff", sd, player)
+			b.Handoff = false
+			b.ClipTime = .5
+			f = RenderBattle(b)
+			if !strings.Contains(f.Plain(), "ENEMY SHOT / INCOMING") {
+				t.Fatal("shooter missing")
+			}
+			capture(t, f, "incoming-miss", sd, player)
+		}
+	}
+}

@@ -14,6 +14,8 @@ type BattlePresentation struct {
 	Cursor                        game.Coord
 	Selected                      int
 	Horizontal, SD, Pending, Solo bool
+	Handoff                       bool
+	Difficulty                    string
 	T                             float64
 	Notice                        string
 	Clip                          *game.Event
@@ -35,7 +37,18 @@ func RenderBattle(b BattlePresentation) *Frame {
 		accent = Green
 	}
 	r.ocean(b.T, 0, true)
-	if b.Clip != nil {
+	if b.Handoff {
+		alien := v.Player == 0
+		color, commander := Gold, "AMERICAN NAVY"
+		if alien {
+			color, commander = Green, "THE BROOD"
+		}
+		y := h/2 - 4
+		r.console(2, y, w-4, 8, alien)
+		r.center(y+1, "ENEMY TURN / "+commander, color)
+		r.center(y+3, "INCOMING FIRE", Bone)
+		r.center(y+5, "FIRE CONTROL TRANSFERRED", Muted)
+	} else if b.Clip != nil {
 		r.battleClip(b, st)
 	} else {
 		cw, ch, x1, x2, py := 6, 4, 12, 92, 18
@@ -113,7 +126,11 @@ func RenderBattle(b BattlePresentation) *Frame {
 			if e.Sunk {
 				outcome = "SUNK"
 			}
-			r.text(xx, y+5, fmt.Sprintf("LAST: %s / %s", e.At, outcome), Muted)
+			shooter := "YOU"
+			if e.Player != v.Player {
+				shooter = "ENEMY"
+			}
+			r.text(xx, y+5, fmt.Sprintf("LAST: %s / %s / %s", e.At, outcome, shooter), Bone)
 		}
 		if !b.SD {
 			for i := 0; i < 5; i++ {
@@ -147,6 +164,9 @@ func RenderBattle(b BattlePresentation) *Frame {
 	}
 	if b.Solo {
 		team += " / SOLO"
+		if b.Difficulty != "" {
+			team += " " + strings.ToUpper(b.Difficulty)
+		}
 	}
 	r.text(2, 1, fmt.Sprintf("%s  /  MATCH %d  /  %s", team, v.Match, strings.ToUpper(v.Phase)), accent)
 	r.plaque(0, h-2, w, 2, Ink)
@@ -163,23 +183,55 @@ func RenderBattle(b BattlePresentation) *Frame {
 			help = "ARROWS move 1-5 hull ENTER place X rotate R random SPACE ready ESC menu"
 		}
 	}
+	if b.Handoff {
+		help = "ENEMY TAKING AIM...   Q quit"
+	}
 	r.text(2, h-2, short(help, w-4), Muted)
-	r.text(2, h-1, short(b.Notice, w-4), Cyan)
+	notice := b.Notice
+	if notice == "" && b.Clip == nil {
+		notice = fmt.Sprintf("O miss  X hit  # sunk   |   %s = column %c, row %d", b.Cursor, 'A'+b.Cursor.X, b.Cursor.Y+1)
+	}
+	r.text(2, h-1, short(notice, w-4), Cyan)
 	return r.frame()
 }
 func (r *Raster) liveBoard(b BattlePresentation, x, y, cw, ch int, fleet []game.Placement, marks [100]game.Mark, own bool) {
-	for yy := 0; yy < 10*ch; yy++ {
-		for xx := 0; xx < 10*cw; xx++ {
-			r.blend(x+xx, y+yy, Ink, .32)
+	placing := b.State.Phase == "placement" && !b.State.Ready[b.State.Player]
+	aiming := (!own && !placing) || (own && placing)
+	// Give every square a stable chart background: moving ocean must not obscure marks.
+	for row := 0; row < 10; row++ {
+		for col := 0; col < 10; col++ {
+			bg := RGB(0x0b202a)
+			if (row+col)%2 == 1 {
+				bg = 0x24424f
+			}
+			if aiming && (row == b.Cursor.Y || col == b.Cursor.X) {
+				bg = 0x254959
+			}
+			if marks[row*10+col] == game.Miss {
+				bg = 0x234957
+			}
+			for yy := 0; yy < ch; yy++ {
+				for xx := 0; xx < cw; xx++ {
+					r.put(x+col*cw+xx, y+row*ch+yy, bg)
+				}
+			}
 		}
 	}
 	for i := 0; i <= 10; i++ {
-		r.line(x+i*cw, y, x+i*cw, y+10*ch, 0x23434c)
-		r.line(x, y+i*ch, x+10*cw, y+i*ch, 0x23434c)
+		r.line(x+i*cw, y, x+i*cw, y+10*ch, 0x41606b)
+		r.line(x, y+i*ch, x+10*cw, y+i*ch, 0x41606b)
 	}
 	for i := 0; i < 10; i++ {
-		r.solidText(x+i*cw+cw/2, y/2-1, string(rune('A'+i)), Muted, Ink)
-		r.solidText(x-3, y/2+i*ch/2, fmt.Sprintf("%2d", i+1), Muted, Ink)
+		fg, bg := Bone, Ink
+		if aiming && i == b.Cursor.X {
+			fg, bg = Ink, Gold
+		}
+		r.solidText(x+i*cw+cw/2, y/2-1, string(rune('A'+i)), fg, bg)
+		fg, bg = Bone, Ink
+		if aiming && i == b.Cursor.Y {
+			fg, bg = Ink, Gold
+		}
+		r.solidText(x-3, y/2+i*ch/2+ch/4, fmt.Sprintf("%2d", i+1), fg, bg)
 	}
 	for i, p := range fleet {
 		if i >= 5 || !p.Valid() {
@@ -197,7 +249,6 @@ func (r *Raster) liveBoard(b BattlePresentation, x, y, cw, ch int, fleet []game.
 		canvas := assets.Get(fmt.Sprintf("ship-%d-top", b.State.Player*5+i), size)
 		r.asset(canvas, x+p.X*cw+1, y+p.Y*ch, 0, 0, false)
 	}
-	placing := b.State.Phase == "placement" && !b.State.Ready[b.State.Player]
 	if own && placing {
 		p := game.Placement{Coord: b.Cursor, Horizontal: b.Horizontal}
 		col := Green
@@ -221,20 +272,22 @@ func (r *Raster) liveBoard(b BattlePresentation, x, y, cw, ch int, fleet []game.
 		if m == game.Unknown {
 			continue
 		}
-		symbol, col := "·", Cyan
+		symbol, col := "O", Cyan
 		if m == game.Hit {
-			symbol, col = "×", Rust
+			symbol, col = "X", Rust
 		}
 		if m == game.Sunk {
 			symbol, col = "#", Gold
 		}
-		r.solidText(x+(i%10)*cw+cw/2, (y+(i/10)*ch)/2, symbol, col, Ink)
+		r.solidText(x+(i%10)*cw+cw/2, (y+(i/10)*ch)/2+ch/4, symbol, col, Ink)
 	}
-	if (!own && !placing) || (own && placing) {
-		xx, yy := x+b.Cursor.X*cw, y+b.Cursor.Y*ch
-		r.line(xx, yy, xx+cw, yy, Gold)
-		r.line(xx, yy+ch, xx+cw, yy+ch, Gold)
+	if aiming {
+		xx, yy := x+b.Cursor.X*cw, y/2+b.Cursor.Y*ch/2+ch/4
+		// Brackets belong inside the selected cell, never on a shared cell boundary.
+		r.solidText(xx, yy, "[", Gold, Ink)
+		r.solidText(xx+cw-1, yy, "]", Gold, Ink)
 	}
+
 }
 func (r *Raster) battleClip(b BattlePresentation, st State) {
 	e := *b.Clip
@@ -265,6 +318,12 @@ func (r *Raster) battleClip(b BattlePresentation, st State) {
 			r.splash(r.W/2, r.H/2, st.T, 1)
 		}
 	}
+	shooter, color := "YOUR SHOT / OUTGOING", Gold
+	if e.Player != b.State.Player {
+		shooter, color = "ENEMY SHOT / INCOMING", Rust
+	}
+	r.plaque(2, 3, r.W-4, 3, Ink)
+	r.center(4, shooter, color)
 	r.plaque(2, r.H/2-7, r.W-4, 3, Ink)
 	r.center(r.H/2-6, short(fmt.Sprintf("%s  /  %s", e.At, label), r.W-6), Gold)
 }
@@ -280,6 +339,8 @@ func RenderFront(sd bool, t float64, title string, lines []string) *Frame {
 	st.SD = sd
 	st.T = t
 	r.cinema(st, Scenes[0], 2, "SIDE")
+	// The scene supplies the ocean and ships, not captions behind the menu.
+	r.Texts = nil
 	width := min(w-8, 112)
 	x := (w - width) / 2
 	y := 3

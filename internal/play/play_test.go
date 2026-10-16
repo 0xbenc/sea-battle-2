@@ -103,7 +103,7 @@ func TestLivePlaybackContinuesWithoutFocus(t *testing.T) {
 	m.width, m.height = 80, 24
 	start := time.Now()
 	m.last = start
-	m.clips = []game.Event{{Seq: 1, Ship: -1}}
+	m.clips = []shotPlayback{{Event: game.Event{Seq: 1, Ship: -1}}}
 	m.clipTime = 3.45
 	m = apply(m, tea.BlurMsg{})
 	m = apply(m, clockTick(start.Add(100*time.Millisecond)))
@@ -255,6 +255,11 @@ func TestSoloMenusAndPresentation(t *testing.T) {
 		}
 		m = apply(m, key("space"))
 		m = apply(m, key("space"))
+		if len(m.clips) != 1 || !m.handoff() {
+			t.Fatal("handoff skipped by repeated input")
+		}
+		m.clipTime = handoffDuration
+		m = apply(m, key("space"))
 		if len(m.clips) != 0 || m.state.Turn != human {
 			t.Fatal("skip lost turn")
 		}
@@ -279,5 +284,116 @@ func TestStoppedSoloDoesNotDismissNewFactionPicker(t *testing.T) {
 	m = apply(m, session.Event{Generation: m.session.Generation(), State: session.Stopped})
 	if m.mode != "faction" {
 		t.Fatal("late stop dismissed new selection")
+	}
+}
+
+func TestMissTimingAndEnemyHandoff(t *testing.T) {
+	for human := 0; human < 2; human++ {
+		m, cleanup := New(Options{})
+		m.width, m.height = 80, 24
+		m.solo = true
+		v := game.New(human).View(human)
+		m.state = &v
+		m.clips = []shotPlayback{{Event: game.Event{Player: human, Ship: -1}}, {Event: game.Event{Player: 1 - human, Ship: -1}}}
+		if m.clipDuration() != 2 {
+			t.Fatal("miss must last 2 seconds")
+		}
+		start := time.Now()
+		m.last = start
+		m.clipTime = 1.95
+		m = apply(m, clockTick(start.Add(100*time.Millisecond)))
+		if len(m.clips) != 1 || !m.handoff() || m.clipDuration() != 2.8 {
+			t.Fatal("missing enemy handoff")
+		}
+		m.clips[0].Hit = true
+		if m.clipDuration() != 4.3 {
+			t.Fatal("hit timing changed")
+		}
+		m.clips[0].Sunk = true
+		if m.clipDuration() != 6.8 {
+			t.Fatal("sink timing changed")
+		}
+		cleanup()
+	}
+}
+
+func TestPlaybackOwnsSnapshotsUntilEachShotFinishes(t *testing.T) {
+	m, cleanup := New(Options{})
+	defer cleanup()
+	m.solo = true
+	m.mode = "game"
+	m.width, m.height = 80, 24
+	g := game.New(0)
+	g.SetFleet(0, game.RandomFleet(1))
+	g.SetFleet(1, game.RandomFleet(2))
+	initial := g.View(0)
+	initial.Connected = [2]bool{true, true}
+	m = apply(m, peer.Message{Type: "state", View: &initial})
+	first := cloneView(initial)
+	first.Events = []game.Event{{Seq: 1, Player: 0, At: game.Coord{X: 1, Y: 3}, Ship: -1}}
+	first.Outgoing[31] = game.Miss
+	first.Turn = 1
+	m = apply(m, peer.Message{Type: "state", View: &first})
+	second := cloneView(first)
+	second.Events = append(second.Events, game.Event{Seq: 2, Player: 1, At: game.Coord{X: 4, Y: 5}, Hit: true, Sunk: true, Ship: 4})
+	second.Incoming[54] = game.Sunk
+	second.Turn = 0
+	second.Phase = "finished"
+	second.Winner = 1
+	m = apply(m, peer.Message{Type: "state", View: &second})
+	if m.state.Phase != "finished" || m.visible.Phase != "battle" || len(m.visible.Events) != 0 || m.visible.Outgoing[31] != game.Unknown || m.visible.Incoming[54] != game.Unknown {
+		t.Fatal("authority leaked ahead of playback")
+	}
+	// Even the quit/menu decision must not treat the unseen winning shot as shown.
+	m = apply(m, tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+	if !m.quitting {
+		t.Fatal("unseen finished state skipped leave confirmation")
+	}
+	m = apply(m, key("n"))
+	// Inputs owned by the caller cannot mutate queued presentation snapshots.
+	first.Events[0].At = game.Coord{}
+	second.Events[0].At = game.Coord{}
+	m.finishClip()
+	if len(m.visible.Events) != 1 || m.visible.Events[0].At.Index() != 31 || m.visible.Outgoing[31] != game.Miss || m.visible.Incoming[54] != game.Unknown || m.visible.Phase != "battle" || m.visible.Turn != 1 {
+		t.Fatal("first shot did not advance to its own snapshot")
+	}
+	m.clipTime = handoffDuration
+	m = apply(m, key("space"))
+	if len(m.clips) != 0 || m.visible.Phase != "finished" || m.visible.Winner != 1 || m.visible.Incoming[54] != game.Sunk {
+		t.Fatal("winning shot never revealed result")
+	}
+}
+
+func TestReconnectAndBatchedCatchupReplacePlayback(t *testing.T) {
+	for _, offline := range []bool{false, true} {
+		m, cleanup := New(Options{})
+		m.width, m.height = 80, 24
+		v := game.New(0).View(0)
+		v.Phase = "battle"
+		m = apply(m, peer.Message{Type: "state", View: &v})
+		a := cloneView(v)
+		a.Events = []game.Event{{Seq: 1, Player: 0, Ship: -1}}
+		m = apply(m, peer.Message{Type: "state", View: &a})
+		m.offline = offline
+		latest := cloneView(a)
+		latest.Events = append(latest.Events, game.Event{Seq: 2, Player: 1, Ship: -1}, game.Event{Seq: 3, Player: 0, Ship: -1})
+		m = apply(m, peer.Message{Type: "state", View: &latest})
+		if len(m.clips) != 0 || len(m.visible.Events) != 3 {
+			t.Fatal("catch-up replayed invented intermediate states")
+		}
+		cleanup()
+	}
+}
+
+func TestDifficultySelection(t *testing.T) {
+	m, cleanup := New(Options{})
+	defer cleanup()
+	m.width, m.height = 80, 24
+	m = apply(m, key("s"))
+	for i, d := range []string{"easy", "medium", "hard"} {
+		m = apply(m, key(string(rune('1'+i))))
+		if string(m.opts.Difficulty) != d || m.mode != "faction" {
+			t.Fatal("difficulty selection", d)
+		}
 	}
 }

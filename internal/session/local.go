@@ -15,7 +15,7 @@ type localCommand struct {
 }
 
 // One owner serializes human commands and bot turns; cancellation owns the timer.
-func (c *Controller) runLocal(op *operation, human int) {
+func (c *Controller) runLocal(op *operation, human int, difficulty bot.Difficulty) {
 	commands := make(chan localCommand)
 	c.mu.Lock()
 	op.local = commands
@@ -59,7 +59,10 @@ func (c *Controller) runLocal(op *operation, human int) {
 			if op.ctx.Err() != nil {
 				return
 			}
-			at, ok := bot.Choose(bot.Observe(g.View(opponent)), rng)
+			at, ok := bot.Decide(op.ctx, difficulty, bot.Observe(g.View(opponent)), rng)
+			if op.ctx.Err() != nil {
+				return
+			}
 			if !ok {
 				c.publish(op, Event{State: Failed, Error: "Bot has no legal target"})
 				return

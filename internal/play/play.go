@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"sea-battle-2/internal/bot"
 	"sea-battle-2/internal/game"
 	"sea-battle-2/internal/peer"
 	"sea-battle-2/internal/session"
@@ -19,6 +20,7 @@ import (
 )
 
 type Options struct {
+	Difficulty      bot.Difficulty
 	Solo            string
 	Host            bool
 	Join, Advertise string
@@ -31,6 +33,12 @@ type sent struct {
 	err        error
 }
 type saved struct{ err error }
+
+// A transmission and its board result are one indivisible playback item.
+type shotPlayback struct {
+	game.Event
+	After game.View
+}
 type Model struct {
 	opts                                             Options
 	session                                          *session.Controller
@@ -40,17 +48,19 @@ type Model struct {
 	input, invite, notice, routerStatus              string
 	width, height                                    int
 	preferSD, offline, pending, invitation, quitting bool
-	state                                            *game.View
+	state                                            *game.View // newest authority; commands only
+	visible                                          *game.View // state reached by playback
 	fleet                                            []game.Placement
 	cursor                                           game.Coord
 	selected                                         int
 	horizontal                                       bool
 	t, clipTime                                      float64
 	last                                             time.Time
-	clips                                            []game.Event
+	clips                                            []shotPlayback
 }
 
 func New(opts Options) (Model, func()) {
+	opts.Difficulty = opts.Difficulty.Default()
 	controller := session.New(context.Background())
 	m := Model{opts: opts, session: controller, mode: "menu", preferSD: opts.SD, fleet: game.EmptyFleet()}
 	if opts.Host || opts.Join != "" || opts.Solo != "" {
@@ -79,7 +89,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(commands...)
 }
 func (m Model) startSolo(human int) tea.Cmd {
-	m.session.Start(session.Config{Solo: true, Human: human})
+	m.session.Start(session.Config{Solo: true, Human: human, Difficulty: m.opts.Difficulty})
 	return nil
 }
 func (m Model) startHost() tea.Cmd {
@@ -106,6 +116,42 @@ func (m Model) send(command peer.Command) tea.Cmd {
 	execute := m.session.Prepare(generation, command)
 	return func() tea.Msg { return sent{generation, execute()} }
 }
+
+func cloneView(v game.View) game.View {
+	v.Own = append([]game.Placement(nil), v.Own...)
+	v.Events = append([]game.Event(nil), v.Events...)
+	return v
+}
+func (m *Model) finishClip() {
+	snapshot := m.clips[0].After
+	m.visible = &snapshot
+	m.clips = m.clips[1:]
+	m.clipTime = 0
+	// Non-shot updates (readiness/rematch votes) may arrive during a clip.
+	if len(m.clips) == 0 && m.state != nil {
+		snapshot := cloneView(*m.state)
+		m.visible = &snapshot
+	}
+}
+
+const handoffDuration = .8
+
+func (m Model) handoff() bool {
+	return m.solo && m.state != nil && len(m.clips) > 0 && m.clips[0].Player != m.state.Player
+}
+func (m Model) clipDuration() float64 {
+	duration := 3.5
+	if !m.clips[0].Hit {
+		duration = 2
+	}
+	if m.clips[0].Sunk {
+		duration = 6
+	}
+	if m.handoff() {
+		duration += handoffDuration
+	}
+	return duration
+}
 func (m Model) fits() bool { return m.width >= 80 && m.height >= 24 }
 func (m Model) sd() bool   { return m.preferSD || m.width < 160 || m.height < 48 }
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -119,13 +165,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.t += dt
 			if len(m.clips) > 0 && !m.invitation {
 				m.clipTime += dt
-				duration := 3.5
-				if m.clips[0].Sunk {
-					duration = 6
-				}
+				duration := m.clipDuration()
 				if m.clipTime >= duration {
-					m.clips = m.clips[1:]
-					m.clipTime = 0
+					m.finishClip()
 				}
 			}
 		}
@@ -137,6 +179,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if v.State == session.Starting {
 			m.state = nil
+			m.visible = nil
 			m.clips = nil
 			m.pending = false
 			m.running = false
@@ -193,13 +236,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch v.Type {
 		case "state":
 			previous := m.state
-			if previous != nil && !m.offline && previous.Match == v.View.Match {
-				for _, e := range v.View.Events {
-					if e.Seq > len(previous.Events) {
-						m.clips = append(m.clips, e)
-					}
-				}
+			// Each live state is an immutable post-shot snapshot. Reconnect/catch-up
+			// replaces presentation atomically rather than inventing intermediate boards.
+			delta := 0
+			if previous != nil {
+				delta = len(v.View.Events) - len(previous.Events)
 			}
+			live := previous != nil && !m.offline && previous.Match == v.View.Match
+			if live && delta == 1 {
+				if m.visible == nil {
+					old := cloneView(*previous)
+					m.visible = &old
+				}
+				e := v.View.Events[len(v.View.Events)-1]
+				m.clips = append(m.clips, shotPlayback{Event: e, After: cloneView(*v.View)})
+			} else if !live || delta != 0 {
+				m.clips = nil
+				m.clipTime = 0
+				snapshot := cloneView(*v.View)
+				m.visible = &snapshot
+			} else if len(m.clips) == 0 {
+				snapshot := cloneView(*v.View)
+				m.visible = &snapshot
+			}
+
 			if previous == nil || previous.Match != v.View.Match {
 				m.fleet = game.EmptyFleet()
 				m.clips = nil
@@ -209,7 +269,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.offline || m.pending {
 				m.notice = ""
 			}
-			m.state = v.View
+			snapshot := cloneView(*v.View)
+			m.state = &snapshot
 			m.offline = false
 			m.pending = false
 			guestArrived := m.state.Connected[1] && (previous == nil || !previous.Connected[1])
@@ -322,7 +383,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if k == "esc" && m.solo && m.mode == "game" {
-			if m.state != nil && m.state.Phase == "finished" {
+			if m.visible != nil && m.visible.Phase == "finished" {
 				m.session.Stop()
 				m.mode = "menu"
 				m.running = false
@@ -354,6 +415,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.mode == "faction" {
+			switch k {
+			case "1":
+				m.opts.Difficulty = bot.Easy
+			case "2":
+				m.opts.Difficulty = bot.Medium
+			case "3":
+				m.opts.Difficulty = bot.Hard
+			}
 			if k == "a" || k == "b" {
 				human := 0
 				if k == "b" {
@@ -391,9 +460,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if len(m.clips) > 0 {
-			if k == "space" || k == "enter" {
-				m.clips = m.clips[1:]
-				m.clipTime = 0
+			if (k == "space" || k == "enter") && !(m.handoff() && m.clipTime < handoffDuration) {
+				m.finishClip()
 			}
 			return m, nil
 		}
@@ -494,7 +562,7 @@ func (m Model) View() tea.View {
 	case m.mode == "menu":
 		f = visual.RenderFront(m.sd(), m.t, "SEA BATTLE 2 / OPERATION PEST TIDE", []string{"S  Single player / Choose your faction", "", "H  Host a battle / American navy", "J  Join by invitation / The brood", "", "One commander hosts. The other pastes their invitation.", "No accounts. No shared servers.", "", "Lookdev remains available with --lookdev.", "", "Q quit    F2 SD / HD", "", m.notice})
 	case m.mode == "faction":
-		f = visual.RenderFront(m.sd(), m.t, "SINGLE PLAYER / CHOOSE COMMAND", []string{"A  American navy", "   Steel hulls. Questionable diplomacy.", "", "B  The brood", "   Organic nastiness. Some assembly assimilated.", "", "The computer commands the other fleet.", "Same rules. No hidden information for the bot.", "", "A / B deploy    ESC back    F2 size    Q quit"})
+		f = visual.RenderFront(m.sd(), m.t, "SINGLE PLAYER / CHOOSE COMMAND", []string{"A  American navy", "   Steel hulls. Questionable diplomacy.", "", "B  The brood", "   Organic nastiness. Some assembly assimilated.", "", "The computer commands the other fleet.", "1 Easy     2 Medium     3 Hard", "Difficulty: " + strings.ToUpper(string(m.opts.Difficulty)), "All opponents follow hits. No hidden information.", "", "A / B deploy    ESC back    F2 size    Q quit"})
 	case m.mode == "join" || m.mode == "rejoin":
 		tail := m.input
 		if len(tail) > 52 {
@@ -511,13 +579,22 @@ func (m Model) View() tea.View {
 		f = visual.RenderFront(m.sd(), m.t, "ESTABLISHING COMMAND", []string{"Connecting directly to the host...", "", "No relay fallback is used.", "If this persists: check the host is still running, allow its TCP", "port through the firewall, or try the other player hosting.", "For upstream NAT/CGNAT: use reachable IPv6 or the same LAN.", "", "ESC back    Q quit", m.notice})
 	default:
 		v := *m.state
+		if m.visible != nil {
+			v = *m.visible
+		}
+		// Link health is immediate; game progress follows the shot timeline.
+		v.Connected = m.state.Connected
 		if m.offline {
 			v.Connected = [2]bool{}
 		}
-		b := visual.BattlePresentation{State: v, Fleet: m.fleet, Cursor: m.cursor, Selected: m.selected, Horizontal: m.horizontal, SD: m.sd(), T: m.t, Notice: m.notice, Pending: m.pending, Solo: m.solo}
+		b := visual.BattlePresentation{State: v, Fleet: m.fleet, Cursor: m.cursor, Selected: m.selected, Horizontal: m.horizontal, SD: m.sd(), T: m.t, Notice: m.notice, Pending: m.pending, Solo: m.solo, Difficulty: string(m.opts.Difficulty)}
 		if len(m.clips) > 0 {
-			b.Clip = &m.clips[0]
+			b.Clip = &m.clips[0].Event
 			b.ClipTime = m.clipTime
+			if m.handoff() {
+				b.Handoff = m.clipTime < handoffDuration
+				b.ClipTime = max(0, m.clipTime-handoffDuration)
+			}
 		}
 		f = visual.RenderBattle(b)
 	}
