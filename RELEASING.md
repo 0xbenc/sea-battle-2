@@ -111,5 +111,14 @@ connection credentials; never include them in release archives.
   then restored terminal settings on exit.
 - A temporary local Homebrew tap installed the snapshot archive and passed
   `brew test`; that installation and temporary tap were removed afterward.
-- Owner confirmed `tty-games/sea-battle-2` and is provisioning the repository secrets.
-  No stable tag or public itch/tap release has been created by this setup.
+- Owner confirmed `tty-games/sea-battle-2`. After local GitHub and Butler sign-in,
+  `TAP_GITHUB_TOKEN`, `BUTLER_API_KEY` and `ITCH_TARGET` were configured in the
+  Sea Battle repository; secret names and timestamps were verified without
+  displaying values. GitHub repository administration and tap write access passed.
+- Butler status successfully read termtd's six existing channels; Sea Battle
+  currently reports no uploaded channels. Actual Sea Battle upload authorization
+  remains to be exercised by its first publication.
+- CI run 39323226376 passed Linux/macOS/Windows tests and uploaded all six test
+  packages. Native Windows Go tests/vet and the Windows Play.cmd version smoke
+  test also passed locally after making Unix file-mode assertions platform-aware.
+- No stable tag or public itch/tap release has been created by this setup.
