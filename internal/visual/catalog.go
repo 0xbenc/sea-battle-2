@@ -57,7 +57,7 @@ var Scenes = []Scene{
 	{"defeat", "NUTRITIONAL VICTORY", "AFTERMATH", "SIDE", Result, 9, 1, 3, 12, "Human fleet: locally sourced. Sustainably terrified."},
 	{"bulletin", "FEDERAL MARITIME BULLETIN", "TRANSMISSION", "FRONT", Broadcast, 0, 0, 0, 10, "REMEMBER: BUGS CANNOT FILE A MARITIME CLAIM."},
 	{"hivecast", "A MESSAGE FROM THE BROOD", "TRANSMISSION", "FRONT", Broadcast, 9, 1, 3, 10, "YOUR VESSEL HAS BEEN ADDED TO THE MENU."},
-	{"human-fleet", "THE SEVENTEEN-SQUARE NAVY", "FLEET FORMATION", "TOP", Fleet, 4, 0, 0, 12, "Five distinct silhouettes / American fleet"},
+	{"human-fleet", "THE SEVENTEEN-SQUARE NAVY", "FLEET FORMATION", "TOP", Fleet, 4, 0, 0, 12, "Five distinct silhouettes / United States Navy fleet"},
 	{"alien-fleet", "THE FOOD CHAIN HAS ARRIVED", "FLEET FORMATION", "TOP", Fleet, 9, 1, 3, 12, "Five distinct organisms / alien fleet"},
 	{"exchange", "A BRIEF EXCHANGE OF VIEWS", "CINEMATIC SEQUENCE", "SIDE", Duel, 3, 0, 2, 17, "Gun director > launch > pursuit > impact > confirmed result"},
 	{"counterexchange", "THE BROOD WOULD LIKE TO REPLY", "CINEMATIC SEQUENCE", "SIDE", Duel, 7, 1, 3, 17, "Synaptic lock > ejection > pursuit > impact > confirmed result"},

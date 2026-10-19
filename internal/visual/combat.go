@@ -268,7 +268,7 @@ func (r *Raster) combatButtons(b BattlePresentation) {
 }
 func (r *Raster) combatHeader(b BattlePresentation, status string, color RGB) {
 	r.text(4, 0, status, color)
-	team := "A / AMERICAN NAVY"
+	team := "A / UNITED STATES NAVY"
 	if b.State.Player == 1 {
 		team = "B / THE BROOD"
 	}

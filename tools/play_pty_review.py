@@ -10,7 +10,7 @@ class Terminal:
         self.master,self.slave=pty.openpty()
         fcntl.ioctl(self.slave,termios.TIOCSWINSZ,struct.pack('HHHH',24,80,0,0))
         self.original=termios.tcgetattr(self.slave)
-        self.proc=subprocess.Popen([str(ROOT/'bin/sea-battle'),*args],cwd=cwd,stdin=self.slave,stdout=self.slave,stderr=self.slave,env=dict(os.environ,TERM='xterm-256color',COLORTERM='truecolor'))
+        self.proc=subprocess.Popen([str(ROOT/'bin/sea-battle'),*args],cwd=cwd,stdin=self.slave,stdout=self.slave,stderr=self.slave,env=dict(os.environ,TERM='xterm-256color',COLORTERM='truecolor',XDG_CONFIG_HOME=str(cwd/'.config')))
         self.screen=Screen(80,24);self.stream=Stream(self.screen);self.decoder=codecs.getincrementaldecoder('utf8')()
     def read(self,seconds=.2):
         end=time.monotonic()+seconds
@@ -61,8 +61,7 @@ def main():
             b=Terminal([],temp);terminals.append(b)
             check('Host a battle' in b.read(1),'Default Host/Join menu')
             b.key('j');b.key('\x1b[200~'+invite+'\x1b[201~')
-            b.key('\r')
-            check('B / THE BROOD' in b.read(.8),'Pasted invitation joins alien seat')
+            check('B / THE BROOD' in b.read(.8),'Pasted invitation automatically joins without Enter')
             check('YOUR WATERS' in a.read(.3),'Host automatically deploys when guest joins')
             a.key('r');a.key(' ')
             check('FLEET LOCKED' in a.read(.3),'Host fleet locks')

@@ -113,7 +113,7 @@ func renderPlacement(b BattlePresentation) *Frame {
 	draft := game.Placement{Coord: b.Cursor, Horizontal: b.Horizontal}
 	legal := active && game.CanPlace(fleet, b.Selected, draft)
 	r.text(4, 0, "DEPLOY YOUR FLEET", Bone)
-	team := "A / AMERICAN NAVY"
+	team := "A / UNITED STATES NAVY"
 	if b.State.Player == 1 {
 		team = "B / THE BROOD"
 	}
@@ -275,7 +275,7 @@ func renderPlacement(b BattlePresentation) *Frame {
 	r.text(4, l.Coach, short(coach, w-8), Bone)
 	if b.PlacementHelp {
 		r.Texts = nil
-		lines := []string{"PLACEMENT CONTROLS", "", "Mouse / arrows / WASD   Move the preview", "Click / Enter           Place the selected ship", "Right click / X         Rotate", "1-5 / Tab               Select a ship", "Delete                  Remove selected ship", "R shuffle    U undo    Space launch", "", "Ships may touch, but cannot overlap.", "Click a placed ship to move it.", "", "Click / ? / Esc close"}
+		lines := []string{"PLACEMENT CONTROLS", "", "Mouse / arrows / WASD   Move the preview", "Click / Enter           Place the selected ship", "Wheel / right click / X Rotate", "1-5 / Tab               Select a ship", "Delete                  Remove selected ship", "R shuffle    U undo    Space launch", "", "Ships may touch, but cannot overlap.", "Click a placed ship to move it.", "", "Click / ? / Esc close"}
 		width := min(68, w-8)
 		left := (w - width) / 2
 		top := (h - len(lines) - 2) / 2

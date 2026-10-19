@@ -239,7 +239,7 @@ func run() error {
 	lookdev := flag.Bool("lookdev", false, "open the scripted art review")
 	difficulty := flag.String("difficulty", "medium", "solo bot: easy, medium or hard")
 	solo := flag.String("solo", "", "single player faction: american or alien")
-	host := flag.Bool("host", false, "host a direct battle as the American navy")
+	host := flag.Bool("host", false, "host a direct battle as the United States Navy")
 	join := flag.String("join", "", "join with a private sb2: invitation")
 	joinFile := flag.String("join-file", "", "read an invitation from a file")
 	port := flag.Int("port", 4747, "host TCP port (0 chooses an available port)")

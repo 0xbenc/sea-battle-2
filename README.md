@@ -8,7 +8,7 @@ Run `make run` for the live **Host / Join** menu (Go 1.26.3+ and the sibling
 `../dotmason` checkout are needed to build; `bin/sea-battle` is self-contained).
 The host commands the Americans; the guest commands the brood.
 
-**Host → C copy invitation → send it privately → Join/paste.** If the terminal
+**Host → C copy invitation → send it privately → Join.** Join checks the clipboard and connects automatically when it finds an invitation. Otherwise, paste the invitation; no Enter is needed. If the terminal
 doesn't support clipboard copying, **S** saves the complete invitation to a
 private `invitation.txt` file. The on-screen preview is deliberately abbreviated.
 When automatic router mapping finishes, copy the updated invitation. The host
@@ -16,7 +16,7 @@ automatically enters deployment when the guest connects. **Enter** lets the host
 deploy early; **I** reopens the invitation console while hosting.
 
 Place ships with **arrows/WASD**, **1–5** selects a hull, **X** rotates, and
-**Enter** places/repositions it. **Backspace** lifts the selected hull.
+**Enter** places/repositions it. Scroll up/down over the board to rotate the selected ship (also **X** or right-click). **Backspace** lifts the selected hull.
 **R** arranges a valid random fleet; **Space** locks it in. Ships may touch.
 Once both commanders are ready, hover or use **arrows/WASD** to aim on the large
 hostile chart; **click/Enter** fires. **Tab** or clicking the small chart switches

@@ -11,7 +11,7 @@ func FactionControls(sd bool) []MenuControl {
 		left, width, top, height, difficulty, footer = 4, 34, 7, 7, 16, 21
 	}
 	controls := []MenuControl{
-		{Key: "a", Label: "A  AMERICAN NAVY", X: left, Y: top, W: width, H: height},
+		{Key: "a", Label: "A  UNITED STATES NAVY", X: left, Y: top, W: width, H: height},
 		{Key: "b", Label: "B  THE BROOD", X: left + width + 4, Y: top, W: width, H: height},
 	}
 	center := 80
@@ -52,8 +52,7 @@ func RenderFactionMenu(sd bool, t float64, difficulty, hover, pressed string, id
 		}
 	}
 	controls := FactionControls(sd)
-	r.text(controls[0].X+2, 4, "SINGLE PLAYER / CHOOSE COMMAND", Gold)
-	r.text(controls[0].X+2, 5, "Choose your navy. The computer commands the other fleet.", Muted)
+	r.text(controls[0].X+2, 4, "SINGLE PLAYER", Gold)
 	for i, c := range controls[:2] {
 		tint, accent := RGB(0x25465b), RGB(0xacc5c3)
 		if i == 1 {
@@ -79,10 +78,8 @@ func RenderFactionMenu(sd bool, t float64, difficulty, hover, pressed string, id
 		line := c.Y + c.H - 4
 		if i == 0 {
 			r.text(c.X+2, line, "Steel hulls.", Bone)
-			r.text(c.X+2, line+1, "Questionable diplomacy.", Muted)
 		} else {
 			r.text(c.X+2, line, "Organic nastiness.", Bone)
-			r.text(c.X+2, line+1, "Some assembly assimilated.", Muted)
 		}
 		r.text(c.X+2, c.Y+c.H-1, "CLICK / "+strings.ToUpper(c.Key)+"  DEPLOY", Bone)
 	}

@@ -203,6 +203,8 @@ func RenderMenuWithHover(sd bool, t float64, notice, hover string, idle MenuIdle
 		r.menuReaction(reaction, idle)
 	}
 	r.menuControls(notice, hover)
+	const credit = "by TTY.games"
+	r.text(r.W-len(credit)-2, r.H/2-1, credit, Muted)
 	return r.frame()
 }
 

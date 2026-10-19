@@ -1,6 +1,6 @@
 # Single player
 
-Press **S**, select **1 Easy / 2 Medium / 3 Hard**, then **A American navy** or
+Press **S**, select **1 Easy / 2 Medium / 3 Hard**, then **A United States Navy** or
 **B The brood**. Medium is the default. The computer commands the opposite faction.
 `--solo american --difficulty hard` (or `--solo alien`) bypasses the picker.
 

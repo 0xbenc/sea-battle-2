@@ -9,7 +9,7 @@ func TestFactionSelectionPresentation(t *testing.T) {
 	for _, sd := range []bool{true, false} {
 		for _, state := range []struct{ name, hover, pressed string }{{"idle", "", ""}, {"human-hover", "a", ""}, {"brood-press", "b", "b"}} {
 			f := RenderFactionMenu(sd, 0, "medium", state.hover, state.pressed, MenuIdle{sheen: -1})
-			for _, text := range []string{"A  AMERICAN NAVY", "B  THE BROOD", "DIFFICULTY", "ESC Back", "Q Quit"} {
+			for _, text := range []string{"A  UNITED STATES NAVY", "B  THE BROOD", "DIFFICULTY", "ESC Back", "Q Quit"} {
 				if !strings.Contains(f.Plain(), text) {
 					t.Fatal("missing selector text", sd, text)
 				}

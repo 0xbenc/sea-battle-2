@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -36,7 +37,10 @@ type sent struct {
 	generation uint64
 	err        error
 }
-type saved struct{ err error }
+type saved struct {
+	path string
+	err  error
+}
 
 // A transmission and its board result are one indivisible playback item.
 type shotPlayback struct {
@@ -49,6 +53,10 @@ type factionDeploy struct {
 }
 
 type Model struct {
+	clipboardSerial                                  uint64
+	clipboardPending, joinAttempt                    bool
+	pressedKey, pressedScreen                        string
+	pressedAt                                        float64
 	connectionStatus                                 string
 	inspectOwn, combatHelp                           bool
 	resultCharts                                     bool
@@ -187,6 +195,10 @@ func (m Model) clipDuration() float64 {
 	}
 	return duration
 }
+func (m Model) connectingScreen() bool {
+	return (m.mode == "connecting" || m.mode == "game") && m.state == nil && !m.invitation
+}
+
 func (m Model) fits() bool { return m.width >= 80 && m.height >= 24 }
 func (m Model) sd() bool   { return m.preferSD || m.width < 160 || m.height < 48 }
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -200,7 +212,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menuHover = ""
 		m.width, m.height = v.Width, v.Height
 	case tea.MouseMsg:
-		if (m.mode != "menu" && m.mode != "faction" && !m.placementScreen() && !m.combatScreen()) || m.quitting || !m.fits() {
+		if (m.mode != "menu" && m.mode != "faction" && m.mode != "settings" && m.mode != "help" && m.mode != "credits" && m.mode != "join" && m.mode != "rejoin" && !m.connectingScreen() && !(m.invitation && m.host) && !m.placementScreen() && !m.combatScreen()) || m.quitting || !m.fits() {
 			return m, nil
 		}
 		mouse := v.Mouse()
@@ -216,6 +228,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.combatMouse(v, x, y)
 		}
 		m.menuHover = visual.MenuControlAt(m.sd(), x, y)
+		if m.connectingScreen() {
+			m.menuHover = visual.ConnectingControlAt(m.sd(), x, y)
+		}
+		if m.invitation && m.host {
+			m.menuHover = visual.InvitationControlAt(m.sd(), m.invite != "", x, y)
+		}
+		if m.mode == "help" || m.mode == "credits" || m.mode == "join" || m.mode == "rejoin" {
+			m.menuHover = visual.FooterControlAt(m.sd(), x, y)
+		}
+		if m.mode == "settings" {
+			m.menuHover = visual.SettingsControlAt(m.sd(), x, y)
+		}
 		if m.mode == "faction" {
 			m.menuHover = visual.FactionControlAt(m.sd(), x, y)
 		}
@@ -231,9 +255,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.menuHover == "esc" {
 					code = tea.KeyEscape
 				}
+				if m.menuHover == "enter" {
+					code = tea.KeyEnter
+				}
 				return m.Update(tea.KeyPressMsg(tea.Key{Code: code}))
 			}
-			if m.mode == "faction" {
+			if m.mode != "menu" {
 				return m, nil
 			}
 			fx := visual.MenuReactionAt(m.sd(), m.menu.Snapshot(), x, y)
@@ -290,6 +317,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.State == session.Connecting && v.Message.Type == "" {
 			m.running = true
 			m.host = v.Host
+			if v.Host || v.Solo {
+				m.joinAttempt = false
+			}
 			m.solo = v.Solo
 			m.port = v.Port
 			m.mode = "game"
@@ -321,6 +351,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notice = v.Error
 			if m.state == nil {
 				m.mode = "menu"
+				if m.joinAttempt {
+					m.mode = "join"
+					m.input = ""
+					m.clipboardPending = false
+					m.notice = "Could not connect. Please paste another invitation."
+				}
 				m.running = false
 			}
 		}
@@ -432,47 +468,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.err != nil {
 			m.notice = v.err.Error()
 		} else {
-			m.notice = "Invitation saved to invitation.txt (private file)."
+			m.notice = "Saved to: " + v.path
+		}
+	case clipboardRead:
+		if m.clipboardPending && v.serial == m.clipboardSerial {
+			cmd := m.acceptInvitation(v.content, false)
+			return m, cmd
+		}
+	case tea.ClipboardMsg:
+		if m.clipboardPending && v.Selection == 'c' {
+			cmd := m.acceptInvitation(v.Content, false)
+			return m, cmd
 		}
 	case tea.PasteMsg:
 		if m.mode == "join" || m.mode == "rejoin" {
-			m.input = cleanInput(v.Content)
+			m.clipboardPending = false
+			cmd := m.acceptInvitation(v.Content, true)
+			return m, cmd
 		}
 	case tea.KeyPressMsg:
 		m.factionPressed = ""
 		m.factionSerial++
 		m.menuHover = ""
 		k := v.String()
+		m.markPress(k)
 		if k == "ctrl+c" {
 			return m, tea.Quit
 		}
 		if m.mode == "join" || m.mode == "rejoin" {
 			switch k {
 			case "esc":
+				m.clipboardPending = false
 				if m.mode == "rejoin" {
 					m.mode = "game"
 				} else {
 					m.mode = "menu"
 				}
 			case "enter":
-				if m.mode == "rejoin" {
-					if err := m.session.UpdateInvitation(m.session.Generation(), m.input); err != nil {
-						m.notice = err.Error()
-					} else {
-						m.mode = "game"
-						m.notice = "Reconnect routes updated; retrying the same session."
-					}
-					return m, nil
+				cmd := m.acceptInvitation(m.input, true)
+				return m, cmd
+			case "q":
+				if m.input == "" {
+					return m, tea.Quit
 				}
-				m.mode = "connecting"
-				return m, m.startJoin(m.input)
+				m.input = cleanInput(m.input + "q")
 			case "backspace":
 				if len(m.input) > 0 {
 					m.input = m.input[:len(m.input)-1]
 				}
 			default:
 				if v.Key().Text != "" {
+					m.clipboardPending = false
 					m.input = cleanInput(m.input + v.Key().Text)
+					if _, err := peer.ParseInvitation(m.input); err == nil {
+						cmd := m.acceptInvitation(m.input, true)
+						return m, cmd
+					}
 				}
 			}
 			return m, nil
@@ -566,6 +617,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.fits() {
 			return m, nil
 		}
+		if m.mode == "credits" {
+			if k == "esc" {
+				m.mode = "settings"
+			}
+			return m, nil
+		}
 		if m.mode == "help" || m.mode == "settings" {
 			if k == "esc" || (m.mode == "help" && k == "?") {
 				m.mode, m.notice = "menu", ""
@@ -573,6 +630,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.mode == "settings" {
 				switch k {
+				case "c":
+					m.mode = "credits"
+					return m, nil
 				case "d":
 					m.preferSD = !m.preferSD
 				case "m":
@@ -603,8 +663,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = "connecting"
 				return m, m.startHost()
 			case "j":
-				m.mode = "join"
-				m.notice = ""
+				cmd := m.openJoin(false)
+				return m, cmd
 			}
 			return m, nil
 		}
@@ -628,10 +688,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if k == "j" && !m.solo && m.offline && !m.host && m.running {
-			m.mode = "rejoin"
-			m.input = ""
-			m.notice = "Paste an updated invitation from the SAME host session."
-			return m, nil
+			cmd := m.openJoin(true)
+			return m, cmd
 		}
 		if k == "i" && m.host {
 			m.invitation = !m.invitation
@@ -646,7 +704,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.notice = "Your invitation is still being prepared."
 					return m, nil
 				}
-				m.notice = "Clipboard requested (OSC52). S saves a file if unsupported."
+				m.notice = "Copy requested. If paste does not work, use S to save the invitation."
 				return m, tea.SetClipboard(m.invite)
 			case "s":
 				if m.invite == "" {
@@ -654,7 +712,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				code := m.invite
-				return m, func() tea.Msg { return saved{saveInvitation(code)} }
+				return m, func() tea.Msg { path, err := saveInvitation(code); return saved{path: path, err: err} }
 			}
 			return m, nil
 		}
@@ -741,19 +799,35 @@ func cleanInput(s string) string {
 	}
 	return s
 }
-func saveInvitation(code string) error {
-	// O_EXCL avoids following a pre-existing symlink or overwriting someone else's file.
-	f, err := os.OpenFile("invitation.txt", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+func saveInvitation(code string) (string, error) {
+	path, err := filepath.Abs("invitation.txt")
 	if err != nil {
-		return fmt.Errorf("Cannot save: %w (remove the old invitation.txt first)", err)
+		return "", fmt.Errorf("Cannot locate invitation file: %w", err)
 	}
+	return path, writeInvitation(path, code)
+}
+
+func writeInvitation(path, code string) error {
+	// Replace atomically with a private file; never follow an old symlink.
+	f, err := os.CreateTemp(filepath.Dir(path), ".invitation-*")
+	if err != nil {
+		return fmt.Errorf("Cannot save %s: %w", path, err)
+	}
+	defer os.Remove(f.Name())
 	_, err = f.WriteString(code + "\n")
 	closeErr := f.Close()
-	if err != nil {
-		return err
+	if err == nil {
+		err = closeErr
 	}
-	return closeErr
+	if err == nil {
+		err = os.Rename(f.Name(), path)
+	}
+	if err != nil {
+		return fmt.Errorf("Cannot save %s: %w", path, err)
+	}
+	return nil
 }
+
 func (m Model) View() tea.View {
 	var f *visual.Frame
 	switch {
@@ -771,28 +845,24 @@ func (m Model) View() tea.View {
 		reaction.Age = m.t - m.reactionStart
 		f = visual.RenderMenuWithHover(m.sd(), m.menuTime, m.notice, m.menuHover, m.menu.Snapshot(), reaction)
 	case m.mode == "help":
-		f = m.front("FIELD MANUAL", helpLines)
+		f = visual.RenderManual(m.sd(), m.menuTime, m.menu.Snapshot(), m.menuHover)
 	case m.mode == "settings":
-		f = m.front("SETTINGS", m.settingsLines())
+		f = visual.RenderSettings(m.sd(), m.menuTime, m.menu.Snapshot(), m.preferSD, !m.stillMenu, string(m.opts.Difficulty), m.notice, m.menuHover)
+	case m.mode == "credits":
+		f = visual.RenderCredits(m.sd(), m.menuTime, m.menu.Snapshot(), m.menuHover)
 	case m.mode == "faction":
 		f = visual.RenderFactionMenu(m.sd(), m.menuTime, string(m.opts.Difficulty), m.menuHover, m.factionPressed, m.menu.Snapshot())
 	case m.mode == "join" || m.mode == "rejoin":
-		tail := m.input
-		if len(tail) > 52 {
-			tail = "..." + tail[len(tail)-49:]
-		}
-		f = m.front("JOIN THE BROOD", []string{"Paste the complete sb2: invitation.", "Wrapped invitations are accepted.", "", tail, "", fmt.Sprintf("%d characters", len(m.input)), "", "ENTER connect    BACKSPACE edit    ESC back", m.notice})
+
+		f = visual.RenderJoin(m.sd(), m.menuTime, m.menu.Snapshot(), m.notice, m.menuHover, m.mode == "rejoin")
 	case m.invitation && m.host:
-		if m.invite == "" {
-			f = m.front("PREPARING YOUR INVITATION", []string{m.connectionStatus, "", "Connection setup is automatic.", "You can arrange your fleet while we get ready.", "", "ENTER arrange fleet    Q leave", m.notice})
-		} else {
-			f = m.front("INVITE YOUR FRIEND", []string{"C copy invitation    S save invitation.txt", "", m.connectionStatus, "", "Send the COMPLETE invitation privately.", "Your friend chooses Join, pastes it, and presses Enter.", "", "Keep this game running. Connection setup is automatic.", "", "ENTER arrange fleet    I reopen this screen", m.notice})
-		}
+		f = visual.RenderInvitation(m.sd(), m.menuTime, m.t, m.menu.Snapshot(), m.invite != "", m.connectionStatus, m.notice, m.menuHover)
 	case m.state == nil:
-		f = m.front("CONNECTING", []string{"Establishing a secure connection…", "", m.connectionStatus, "", "We will choose the best available route automatically.", "Keep the host's game running.", "", "ESC back    Q quit", m.notice})
+		f = visual.RenderConnecting(m.sd(), m.menuTime, m.t, m.menu.Snapshot(), m.connectionStatus, m.notice, m.menuHover)
 	default:
 		f = visual.RenderBattle(m.battlePresentation())
 	}
+	m.drawPress(f)
 	content := ""
 	if !m.fits() {
 		content = fmt.Sprintf("SEA BATTLE 2\nNeed 80 x 24. Current: %d x %d.\nEnlarge the terminal. Ctrl+C quits.", m.width, m.height)
@@ -806,7 +876,7 @@ func (m Model) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
-	if (m.mode == "menu" || m.mode == "faction" || m.placementScreen() || m.combatScreen()) && !m.quitting && m.fits() {
+	if (m.mode == "menu" || m.mode == "faction" || m.mode == "settings" || m.mode == "help" || m.mode == "credits" || m.mode == "join" || m.mode == "rejoin" || m.connectingScreen() || (m.invitation && m.host) || m.placementScreen() || m.combatScreen()) && !m.quitting && m.fits() {
 		v.MouseMode = tea.MouseModeAllMotion
 	}
 	v.WindowTitle = "Sea Battle 2 / Live command"

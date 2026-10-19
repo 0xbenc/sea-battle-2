@@ -12,7 +12,7 @@ def main():
         assert ok,label
         checks.append(label)
     with tempfile.TemporaryDirectory(prefix='sb2-solo-') as temp:
-        for faction,label in [('american','A / AMERICAN NAVY'),('alien','B / THE BROOD')]:
+        for faction,label in [('american','A / UNITED STATES NAVY'),('alien','B / THE BROOD')]:
             for hd in [False,True]:
                 t=Terminal([],Path(temp))
                 try:

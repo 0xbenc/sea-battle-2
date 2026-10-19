@@ -144,7 +144,7 @@ func (m *Model) placementKey(k string) tea.Cmd {
 func (m Model) placementMouse(v tea.MouseMsg, x, y int) (tea.Model, tea.Cmd) {
 	mouse := v.Mouse()
 	switch v.(type) {
-	case tea.MouseMotionMsg, tea.MouseClickMsg:
+	case tea.MouseMotionMsg, tea.MouseClickMsg, tea.MouseWheelMsg:
 	default:
 		return m, nil
 	}
@@ -176,7 +176,8 @@ func (m Model) placementMouse(v tea.MouseMsg, x, y int) (tea.Model, tea.Cmd) {
 	if !onBoard {
 		return m, nil
 	}
-	if clicked && mouse.Button == tea.MouseRight {
+	_, wheeled := v.(tea.MouseWheelMsg)
+	if (clicked && mouse.Button == tea.MouseRight) || (wheeled && (mouse.Button == tea.MouseWheelUp || mouse.Button == tea.MouseWheelDown)) {
 		return m.Update(tea.KeyPressMsg(tea.Key{Code: 'x'}))
 	}
 	if m.selected >= 0 {

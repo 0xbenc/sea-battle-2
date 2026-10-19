@@ -33,7 +33,7 @@ func TestMenuMouseTargetsAndCentering(t *testing.T) {
 				}
 				m = apply(m, tea.MouseClickMsg(tea.Mouse{X: x, Y: y, Button: tea.MouseLeft}))
 				expectedMouse := tea.MouseModeNone
-				if action.mode == "faction" {
+				if action.mode == "faction" || action.mode == "settings" || action.mode == "help" || action.mode == "join" {
 					expectedMouse = tea.MouseModeAllMotion
 				}
 				if m.mode != action.mode || m.View().MouseMode != expectedMouse {
@@ -123,6 +123,58 @@ func TestFactionMousePressAndCancellation(t *testing.T) {
 		m = apply(m, factionDeploy{"a", m.factionSerial})
 		if m.mode != "connecting" {
 			t.Fatal("team click did not deploy")
+		}
+		close()
+	}
+}
+
+func TestSecondaryFooterNavigation(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {160, 48}, {184, 57}} {
+		for _, mode := range []string{"help", "settings", "credits"} {
+			m, close := New(Options{})
+			m.width, m.height = size[0], size[1]
+			m.mode = mode
+			w, h := 160, 48
+			if m.sd() {
+				w, h = 80, 24
+			}
+			c := visual.FooterControls(m.sd())[0]
+			mouse := tea.Mouse{X: c.X + (m.width-w)/2, Y: c.Y + (m.height-h)/2, Button: tea.MouseLeft}
+			m = apply(m, tea.MouseMotionMsg(mouse))
+			if m.menuHover != "esc" || m.View().MouseMode != tea.MouseModeAllMotion {
+				t.Fatalf("%s footer hover missing at %v", mode, size)
+			}
+			m = apply(m, tea.MouseClickMsg(mouse))
+			want := "menu"
+			if mode == "credits" {
+				want = "settings"
+			}
+			if m.mode != want {
+				t.Fatalf("%s back reached %s, want %s", mode, m.mode, want)
+			}
+			close()
+		}
+	}
+}
+
+func TestConnectingCancelClick(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {160, 48}, {184, 57}} {
+		m, close := New(Options{})
+		m.width, m.height = size[0], size[1]
+		m.mode = "connecting"
+		w, h := 160, 48
+		if m.sd() {
+			w, h = 80, 24
+		}
+		c := visual.ConnectingControls(m.sd())[0]
+		mouse := tea.Mouse{X: c.X + (m.width-w)/2, Y: c.Y + (m.height-h)/2, Button: tea.MouseLeft}
+		m = apply(m, tea.MouseMotionMsg(mouse))
+		if m.menuHover != "esc" || m.View().MouseMode != tea.MouseModeAllMotion {
+			t.Fatal("connecting cancel is not hoverable")
+		}
+		m = apply(m, tea.MouseClickMsg(mouse))
+		if m.mode != "menu" {
+			t.Fatal("cancel did not return to menu")
 		}
 		close()
 	}

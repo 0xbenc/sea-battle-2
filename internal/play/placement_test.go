@@ -130,3 +130,32 @@ func TestPlacementLaunchResetsCombatAim(t *testing.T) {
 		t.Fatal("deployment state leaked into combat")
 	}
 }
+
+func TestPlacementScrollRotation(t *testing.T) {
+	for _, sd := range []bool{true, false} {
+		m := placementModel(t, sd)
+		original := m.horizontal
+		fleet := append([]game.Placement(nil), m.fleet...)
+		wheel := tea.MouseWheelMsg(placementClick(m, m.cursor, tea.MouseWheelUp))
+		m = apply(m, wheel)
+		if m.horizontal == original || !reflect.DeepEqual(m.fleet, fleet) {
+			t.Fatal("scroll must rotate preview without placing")
+		}
+		wheel = tea.MouseWheelMsg(placementClick(m, m.cursor, tea.MouseWheelDown))
+		m = apply(m, wheel)
+		if m.horizontal != original {
+			t.Fatal("scroll down did not rotate")
+		}
+		m.placementHelp = true
+		m = apply(m, wheel)
+		if m.horizontal != original {
+			t.Fatal("scroll rotated through help")
+		}
+		m.placementHelp = false
+		m.state.Ready[m.state.Player] = true
+		m = apply(m, wheel)
+		if m.horizontal != original {
+			t.Fatal("scroll rotated locked fleet")
+		}
+	}
+}

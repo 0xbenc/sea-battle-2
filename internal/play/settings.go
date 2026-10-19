@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"sea-battle-2/internal/bot"
 )
@@ -59,37 +58,4 @@ func (m *Model) savePreferences() {
 	} else {
 		m.notice = "Settings saved."
 	}
-}
-
-func (m Model) settingsLines() []string {
-	display, motion := "AUTO (HD when the terminal fits)", "ANIMATED"
-	if m.preferSD {
-		display = "COMPACT / SD"
-	}
-	if m.stillMenu {
-		motion = "STILL"
-	}
-	return []string{
-		"D  Display: " + display,
-		"M  Menu motion: " + motion,
-		"", "Default solo opponent: " + strings.ToUpper(string(m.opts.Difficulty)),
-		"1 Easy    2 Medium    3 Hard",
-		"", "Easy follows hits. Medium hunts. Hard calculates.",
-		"Menu motion does not change battle animations.",
-		"", m.notice, "", "ESC back    Q quit",
-	}
-}
-
-var helpLines = []string{
-	"Sink all five enemy ships. Players alternate shots.",
-	"Chart letters are columns; numbers are rows (B4).",
-	"", "Mouse / arrows move    1-5 select ship    X rotate",
-	"Click / Enter place    R shuffle    U undo    Del remove",
-	"SPACE launch fleet     ENTER fire at the selected cell",
-	"", "Single player: choose either navy and a bot difficulty.",
-	"Multiplayer: H hosts; send the invitation to your friend.",
-	"Your friend uses J to paste it. Keep the host running.",
-	"Connection setup is automatic. Public or direct routes",
-	"are selected securely. No special launcher is needed.",
-	"", "ESC / ? back    Q quit",
 }
