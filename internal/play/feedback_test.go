@@ -41,7 +41,7 @@ func TestPressFollowsDisplayResizeAndDoesNotLeakScreens(t *testing.T) {
 	if !m.sd() {
 		t.Fatal("display toggle did not execute")
 	}
-	frame := visual.RenderSettings(m.sd(), 0, m.menu.Snapshot(), true, true, "medium", "", "")
+	frame := visual.RenderSettings(m.sd(), 0, m.menu.Snapshot(), true, true, "medium", "", "", "dev")
 	before := append([]visual.Cell(nil), frame.Cells...)
 	m.drawPress(frame)
 	if reflect.DeepEqual(before, frame.Cells) {

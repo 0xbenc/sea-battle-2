@@ -343,7 +343,7 @@ func run() error {
 				return err
 			}
 		}
-		opts := play.Options{Solo: *solo, Host: *host, Join: *join, JoinAddress: *joinAddress, WebSocketPort: *websocketPort, Port: *port, Advertise: *advertise, NoMap: *noMap, NoPublic: *noPublic, SD: *size == "sd"}
+		opts := play.Options{Version: version, Solo: *solo, Host: *host, Join: *join, JoinAddress: *joinAddress, WebSocketPort: *websocketPort, Port: *port, Advertise: *advertise, NoMap: *noMap, NoPublic: *noPublic, SD: *size == "sd"}
 		flag.Visit(func(f *flag.Flag) {
 			if f.Name == "difficulty" {
 				opts.Difficulty = bot.Difficulty(*difficulty)

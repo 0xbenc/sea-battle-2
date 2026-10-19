@@ -20,6 +20,7 @@ import (
 )
 
 type Options struct {
+	Version         string
 	SettingsPath    string
 	DisplayExplicit bool
 	Difficulty      bot.Difficulty
@@ -862,7 +863,7 @@ func (m Model) View() tea.View {
 	case m.mode == "help":
 		f = visual.RenderManual(m.sd(), m.menuTime, m.menu.Snapshot(), m.menuHover)
 	case m.mode == "settings":
-		f = visual.RenderSettings(m.sd(), m.menuTime, m.menu.Snapshot(), m.preferSD, !m.stillMenu, string(m.opts.Difficulty), m.notice, m.menuHover)
+		f = visual.RenderSettings(m.sd(), m.menuTime, m.menu.Snapshot(), m.preferSD, !m.stillMenu, string(m.opts.Difficulty), m.notice, m.menuHover, m.opts.Version)
 	case m.mode == "credits":
 		f = visual.RenderCredits(m.sd(), m.menuTime, m.menu.Snapshot(), m.menuHover)
 	case m.mode == "faction":

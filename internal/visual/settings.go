@@ -27,7 +27,7 @@ func SettingsControlAt(sd bool, x, y int) string {
 	return ""
 }
 
-func RenderSettings(sd bool, t float64, idle MenuIdle, compact, animated bool, difficulty, notice, hover string) *Frame {
+func RenderSettings(sd bool, t float64, idle MenuIdle, compact, animated bool, difficulty, notice, hover, version string) *Frame {
 	r := frontOcean(sd, t, idle)
 	for i, c := range r.Pixels {
 		r.Pixels[i] = mix(c, Ink, .86)
@@ -38,6 +38,15 @@ func RenderSettings(sd bool, t float64, idle MenuIdle, compact, animated bool, d
 		scale = 1
 	}
 	r.text(left, 2*scale, "SETTINGS", Gold)
+	if version == "" {
+		version = "dev"
+	}
+	label := "Version " + version
+	// Leave room for the heading even with a long local build identifier.
+	if len(label) > width-12 {
+		label = label[:width-15] + "..."
+	}
+	r.text(left+width-len(label), 2*scale, label, Muted)
 	r.text(left, 4*scale, "DISPLAY & MOTION", Muted)
 	for _, c := range controls[:6] {
 		if c.Key == "d" || c.Key == "m" || c.Key == "c" {

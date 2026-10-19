@@ -27,3 +27,20 @@ the game shows its full path. Share invitations privately.
 Launchers do not install anything or change PATH. Keep the extracted package
 intact. If a launcher cannot open a terminal, start the executable from an existing
 terminal. macOS packages are currently unsigned and not notarized.
+
+## Versions and updates
+
+Open **Settings** to see your version, or run `sea-battle --version`. Local
+`make run` builds show the Git revision and whether there are uncommitted changes.
+
+Close the game before updating; an active match cannot survive a host restart.
+Settings stay in your user config directory when you replace the game package.
+
+- **Homebrew:** run `brew update`, then `brew upgrade 0xbenc/tap/sea-battle`.
+- **itch app:** use the app's update controls for Sea Battle 2.
+- **Browser download:** extract the newer package into a new folder and launch it.
+  Keep the old folder until you've checked the new version. Saved invitations
+  in that folder are private and only useful while their host session is alive.
+
+TTY.games installation is being prepared and is not available yet. Sea Battle
+does not check for updates or download a replacement game while you're playing.

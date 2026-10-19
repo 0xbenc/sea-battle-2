@@ -1,6 +1,7 @@
 .PHONY: build run test art review hardening test-terminal
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
 build:
-	go build -o bin/sea-battle .
+	go build -ldflags "-X main.version=$(or $(VERSION),dev)" -o bin/sea-battle .
 run: build
 	./bin/sea-battle
 test:

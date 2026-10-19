@@ -129,3 +129,54 @@ The owner tested the installed Linux/WSL and native Windows packages and reporte
 “they run great!”, then approved publication to itch and Homebrew. The first
 stable version is **1.0.0**. TTY.games integration remains deferred. The earlier
 no-public-release statements above describe the setup checkpoint.
+
+## Version display and update compatibility
+
+Release tags are the version source: GoReleaser embeds `main.version` once, used
+by both `--version` and Settings. `make build`/`make run` embed `git describe` with
+a dirty marker; plain `go run .` reports `dev`. Never relabel an existing release.
+The in-game display and update preparation follow the already-started 1.0.0
+publication as **1.0.1**.
+
+Settings format is unchanged from 1.0.0. The committed fixture
+`internal/play/testdata/settings-v1.0.0.json` exercises loading without writes,
+preserving every preference and saving in the compatible format. Run this test
+in the native OS CI matrix for every update. There is no persistent battle save
+or game-progress migration to test at this version.
+
+### TTY.games readiness (not enabled)
+
+Reviewed the adjacent storefront's `docs/TERMINAL_INSTALL.md`,
+`docs/RELEASE_PUBLISHING.md`, `internal/releases/contract.go`, and
+`internal/installer/{manifest,install,activation}.go`. Its protocol-2 installer
+owns explicit updates: checksum verification, user consent, running-game checks,
+versioned installs, backup-before-activation, previous-binary retention and a
+wrapper/receipt recovery journal. Downgrades and changed install contracts are
+blocked. Sea Battle should use that installer when registered; it does not need
+a second updater inside the game.
+
+The candidate archive contract already fits: command `sea-battle`, support files
+`LICENSE`, `README.md`, `PLAYING.md`, six OS/architecture targets, flat archives.
+Do not yet publish a TTY contract with an empty save list: that would omit settings
+from the installer's backup guarantee. Its current contract only accepts named
+files directly under the home directory. Sea Battle's actual settings locations:
+
+| OS | Settings file |
+| --- | --- |
+| Linux | `$XDG_CONFIG_HOME/sea-battle-2/settings.json`, default `~/.config/sea-battle-2/settings.json` |
+| macOS | `~/Library/Application Support/sea-battle-2/settings.json` |
+| Windows | `%APPDATA%\sea-battle-2\settings.json` |
+
+Before registration, extend the storefront's reviewed declarative contract with
+a user-config-root location, resolved with the same OS rules as the game. Bound
+allowed relative paths, reject traversal/links, preserve the protocol-1/2 termtd
+contract, and exercise real settings backups plus failed/interrupted activation
+on Linux and native Windows. Do not move existing player settings to fit the old
+contract or introduce downloaded migration scripts. Include this reviewed contract
+in the per-game server policy before automatic publication is enabled.
+
+The cloudflared cache is disposable, not player progress. Explicit invitation
+exports live in the player's working directory, contain expiring credentials and
+are not persistent saves. Document their lifetime rather than collecting arbitrary
+working-directory files in updater backups. No storefront code, live policy, IAM
+permissions or TTY.games publishing jobs were changed in this preparation.
