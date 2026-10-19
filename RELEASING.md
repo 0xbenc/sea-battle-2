@@ -180,3 +180,33 @@ exports live in the player's working directory, contain expiring credentials and
 are not persistent saves. Document their lifetime rather than collecting arbitrary
 working-directory files in updater backups. No storefront code, live policy, IAM
 permissions or TTY.games publishing jobs were changed in this preparation.
+
+## Published release verification (2026-10-19)
+
+- **1.0.0** release run [39324724698](https://github.com/0xbenc/sea-battle-2/actions/runs/39324724698)
+  passed all three native OS checks, release/provenance and both publisher jobs.
+- **1.0.1** release run [39325216322](https://github.com/0xbenc/sea-battle-2/actions/runs/39325216322)
+  and main CI run 39325203890 also passed. Current stable release:
+  [Sea Battle 2 v1.0.1](https://github.com/0xbenc/sea-battle-2/releases/tag/v1.0.1).
+- Downloaded and independently verified all six retained archives for both tags.
+  Butler reports all six channels completed at 1.0.1, with 1.0.0 as their previous
+  build. Linux/Windows binaries fetched back from itch match verified release
+  archives exactly. Native Windows Play.cmd reports the correct version.
+- Installed 1.0.0 from the real Homebrew tap, passed its formula tests and a real
+  terminal menu/deployment/battle check, then upgraded to 1.0.1 through Homebrew
+  and passed the formula tests again. Tap commit: `0ed1d11`.
+- Actual downloaded itch binaries were tested in sequence: set all preferences
+  in 1.0.0, replace the executable with 1.0.1, reopen Settings. The version changed,
+  preferences persisted byte-for-byte and terminal attributes were restored.
+  Native Windows/macOS CI also ran the prior-release settings compatibility test.
+- This workstation now runs 1.0.1: Linux's `~/.local/bin/sea-battle` points to the
+  Homebrew installation; Windows keeps its existing Start-menu/PATH destination.
+  Both earlier snapshots are retained. No player settings were moved or rewritten.
+- **itch page is not publicly accessible yet:** anonymous request to
+  `https://tty-games.itch.io/sea-battle-2` returned 404 even though authenticated
+  Butler downloads succeeded. Owner wants a styled page with copy/screenshots
+  comparable to termtd before launch. Dashboard editing requires a separate web
+  session; Butler build-upload credentials do not provide that session. Do not
+  describe successful channel uploads as a completed public itch launch.
+- TTY.games publishing remains deferred; the settings-backup contract work above
+  is a prerequisite. No infrastructure was changed.
