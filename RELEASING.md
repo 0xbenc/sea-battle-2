@@ -50,7 +50,7 @@ Actions settings. Existing termtd repository secrets are not inherited:
 | --- | --- |
 | Secret `TAP_GITHUB_TOKEN` | Contents write access to `0xbenc/homebrew-tap` |
 | Secret `BUTLER_API_KEY` | Butler credential authorized for the itch project |
-| Variable `ITCH_TARGET` | Exact `account/project`, expected `tty-games/sea-battle-2`; confirm before publishing |
+| Variable `ITCH_TARGET` | Confirmed target `tty-games/sea-battle-2` |
 
 Use GitHub's encrypted secret settings or `gh secret set` with a private prompt or
 credential pipe. Never commit tokens. A logged-in local gh/Butler installation can
@@ -101,3 +101,15 @@ outside the package. Public-connection helpers are cached separately in the OS
 cache directory. Host sessions are in memory, and quitting the host ends the match.
 Invitation files are explicitly saved to the working directory and are private
 connection credentials; never include them in release archives.
+
+## Setup verification (2026-10-19)
+
+- All six snapshot archives built; GoReleaser configuration and workflow syntax passed.
+- Every itch package preserved its exact release executable and passed Butler's
+  launch-manifest validation (ARM limitations above still apply).
+- The Linux package reached the menu, solo deployment and battle in a real PTY,
+  then restored terminal settings on exit.
+- A temporary local Homebrew tap installed the snapshot archive and passed
+  `brew test`; that installation and temporary tap were removed afterward.
+- Owner confirmed `tty-games/sea-battle-2` and is provisioning the repository secrets.
+  No stable tag or public itch/tap release has been created by this setup.

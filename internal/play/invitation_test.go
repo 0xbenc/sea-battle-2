@@ -1,8 +1,11 @@
 package play
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -23,7 +26,8 @@ func TestInvitationSaveReplacesPrivateFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0600 {
+	// Windows reports DOS file attributes here, not Unix permission bits.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("permissions: %o", info.Mode().Perm())
 	}
 	target := filepath.Join(dir, "untouched.txt")
@@ -34,6 +38,9 @@ func TestInvitationSaveReplacesPrivateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(target, path); err != nil {
+		if runtime.GOOS == "windows" && errors.Is(err, syscall.Errno(1314)) {
+			t.Skip("symlink fixture requires Windows Developer Mode or link privilege; replacement already checked")
+		}
 		t.Fatal(err)
 	}
 	if err := writeInvitation(path, "latest"); err != nil {
