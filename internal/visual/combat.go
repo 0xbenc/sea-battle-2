@@ -30,8 +30,15 @@ func (b CombatBoard) CellAt(x, row int) (game.Coord, bool) {
 	return game.Coord{X: (x - b.X) / b.CW, Y: (y - b.Y) / b.CH}, true
 }
 func CombatControls(b BattlePresentation) []MenuControl {
-	if b.Clip != nil || b.Handoff {
+	if b.Handoff {
 		return nil
+	}
+	if b.Clip != nil {
+		row := 46
+		if b.SD {
+			row = 22
+		}
+		return []MenuControl{{Key: "space", Label: "SPACE / ENTER Skip", X: 4, Y: row, W: 20, H: 1}}
 	}
 	if b.State.Phase == "finished" && !b.ResultCharts {
 		return ResultControls(b.SD)
@@ -48,7 +55,11 @@ func CombatControls(b BattlePresentation) []MenuControl {
 	if b.State.Phase == "finished" {
 		action, label = "r", "R Rematch"
 	}
-	controls = append(controls, MenuControl{Key: action, Label: label, X: PlacementGeometry(b.SD).X, Y: fire, W: 18, H: 1})
+	height := 3
+	if b.SD {
+		height = 1
+	}
+	controls = append(controls, MenuControl{Key: action, Label: label, X: PlacementGeometry(b.SD).X, Y: fire, W: 18, H: height})
 	controls = append(controls, MenuControl{Key: "?", Label: "? Help", X: 4, Y: footer, W: 10, H: 1})
 	label = "TAB Fleet"
 	if b.State.Phase == "finished" {
@@ -136,108 +147,130 @@ func shipHealth(v game.View, index int) int {
 	}
 	return health
 }
+
+// Fleet charts use solid tiles and redundant symbols at every scale.
+// A small tile stays legible instead of squeezing a ship illustration into it.
+const (
+	chartSea  RGB = 0x102630
+	chartShip RGB = 0x398d88
+	chartMiss RGB = 0x254759
+	chartHit  RGB = 0xb65036
+	chartSunk RGB = 0x515568
+)
+
 func (r *Raster) combatBoard(b BattlePresentation, g CombatBoard, own, large bool) {
-	marks := b.State.Outgoing
-	cursor := b.Cursor
+	marks, cursor := b.State.Outgoing, b.Cursor
 	if own {
-		marks = b.State.Incoming
-		cursor = b.OwnCursor
+		marks, cursor = b.State.Incoming, b.OwnCursor
 	}
 	accent := Gold
 	if b.State.Player == 1 {
 		accent = Green
 	}
-	latest := latestShot(b.State, own)
-	for row := 0; row < 10; row++ {
-		for col := 0; col < 10; col++ {
-			color := RGB(0x132e3a)
-			if (row+col)%2 == 1 {
-				color = 0x203e49
+	var hull [100]int
+	if own {
+		for i, p := range b.State.Own {
+			if i >= 5 || !p.Valid() {
+				continue
 			}
-			if large && (row == cursor.Y || col == cursor.X) {
-				color = mix(color, accent, .10)
+			for _, cell := range game.Cells(p, game.Lengths[i]) {
+				if cell.Valid() {
+					hull[cell.Index()] = i + 1
+				}
 			}
-			mark := marks[row*10+col]
-			if mark == game.Miss {
-				color = 0x244d5b
-			}
-			if mark >= game.Hit {
-				color = 0x503632
-			}
-			if mark == game.Sunk {
-				color = 0x28343d
-			}
-			r.rect(g.X+col*g.CW, g.Y+row*g.CH, g.CW, g.CH, color)
 		}
 	}
-	for i := 0; i <= 10; i++ {
-		r.line(g.X+i*g.CW, g.Y, g.X+i*g.CW, g.Y+10*g.CH, 0x3f5964)
-		r.line(g.X, g.Y+i*g.CH, g.X+10*g.CW, g.Y+i*g.CH, 0x3f5964)
+	compact := g.CH == 2
+	for row := 0; row < 10; row++ {
+		for col := 0; col < 10; col++ {
+			index := row*10 + col
+			color := chartSea
+			if (row+col)%2 == 1 {
+				color = 0x142d36
+			}
+			if large && (row == cursor.Y || col == cursor.X) {
+				color = mix(color, accent, .09)
+			}
+			symbol := ""
+			if hull[index] > 0 {
+				color = chartShip
+				symbol = fmt.Sprint(hull[index])
+			}
+			switch marks[index] {
+			case game.Miss:
+				color, symbol = chartMiss, "·"
+			case game.Hit:
+				color, symbol = chartHit, "X"
+			case game.Sunk:
+				color, symbol = chartSunk, "#"
+			}
+			x, y := g.X+col*g.CW, g.Y+row*g.CH
+			r.rect(x, y, g.CW, g.CH, 0x223a44)
+			inset := 1
+			if compact {
+				inset = 0
+			}
+			r.rect(x+inset, y+inset, g.CW-inset, g.CH-inset, color)
+			if symbol != "" {
+				tx, ty := x+g.CW/2, (y+g.CH/2)/2
+				if compact {
+					tx = x
+				}
+				r.solidText(tx, ty, symbol, 0xf4f2de, color)
+			}
+		}
 	}
 	for i := 0; i < 10; i++ {
-		fg, bg := Bone, Ink
+		fg, bg := Muted, Ink
 		if large && cursor.X == i {
 			fg, bg = Ink, accent
 		}
 		r.solidText(g.X+i*g.CW+g.CW/2, g.Y/2-1, string(rune('A'+i)), fg, bg)
-		fg, bg = Bone, Ink
+		fg, bg = Muted, Ink
 		if large && cursor.Y == i {
 			fg, bg = Ink, accent
 		}
 		r.solidText(g.X-3, (g.Y+i*g.CH+g.CH/2)/2, fmt.Sprintf("%2d", i+1), fg, bg)
 	}
-	if own {
-		l := PlacementLayout{X: g.X, Y: g.Y, CW: g.CW, CH: g.CH}
-		for i, p := range b.State.Own {
-			if i < 5 && p.Valid() {
-				if b.SD && !large {
-					r.combatSmallHull(b, g, i, p)
-				} else {
-					r.placementHull(b, l, i, p, false, true)
-				}
-			}
-		}
-	}
-	if latest != nil {
-		x, y := g.X+latest.At.X*g.CW, g.Y+latest.At.Y*g.CH
-		color := Cyan
-		if latest.Hit {
-			color = 0xffd778
-		}
-		if latest.Sunk {
-			color = 0xa1adb0
-		}
-		r.line(x, y, x+g.CW, y, color)
-		r.line(x, y+g.CH, x+g.CW, y+g.CH, color)
-	}
 	if large {
 		x, y := g.X+cursor.X*g.CW, g.Y+cursor.Y*g.CH
-		// Small corner brackets keep the square and its result readable.
-		for _, dx := range []int{0, g.CW} {
-			for _, dy := range []int{0, g.CH} {
+		for _, dx := range []int{0, g.CW - 1} {
+			for _, dy := range []int{0, g.CH - 1} {
 				r.put(x+dx, y+dy, accent)
 			}
 		}
 	}
-	for i, mark := range marks {
-		if mark == game.Unknown {
-			continue
-		}
-		r.combatImpact(g.X+i%10*g.CW+1, g.Y+i/10*g.CH+1, g.CW-1, g.CH-1, mark, b.T)
+}
+
+func (r *Raster) chartLegend(x, row int) {
+	for _, item := range []struct {
+		label string
+		color RGB
+	}{{"1 Ship", chartShip}, {"· Miss", chartMiss}, {"X Hit", chartHit}, {"# Sunk", chartSunk}} {
+		// All legend symbols are one rune; don't split the UTF-8 miss marker.
+		runes := []rune(item.label)
+		r.solidText(x, row, string(runes[0]), Bone, item.color)
+		r.text(x+1, row, string(runes[1:]), Muted)
+		x += len(runes) + 3
 	}
+}
+
+// CombatControlEnabled is shared by drawing and press feedback.
+func CombatControlEnabled(b BattlePresentation, key string) bool {
+	if key == "enter" {
+		return combatCanFire(b)
+	}
+	if key == "r" {
+		return !b.Pending && !b.State.Rematch[b.State.Player]
+	}
+	return true
 }
 func (r *Raster) combatButtons(b BattlePresentation) {
 	for _, c := range CombatControls(b) {
 		if b.Handoff && c.Key == "space" {
 			continue
 		}
-		enabled := true
-		if c.Key == "enter" {
-			enabled = combatCanFire(b)
-		}
-		if c.Key == "r" {
-			enabled = !b.Pending && !b.State.Rematch[b.State.Player]
-		}
+		enabled := CombatControlEnabled(b, c.Key)
 		color := Muted
 		if enabled {
 			color = Bone
@@ -263,10 +296,13 @@ func (r *Raster) combatButtons(b BattlePresentation) {
 		if c.Key == "r" && !enabled {
 			label = "REMATCH REQUESTED"
 		}
-		r.text(c.X, c.Y, label, color)
+		y := c.Y + (c.H-1)/2
+		r.text(c.X, y, label, color)
 	}
 }
 func (r *Raster) combatHeader(b BattlePresentation, status string, color RGB) {
+	r.rect(0, 0, r.W, 4, Panel)
+	r.rect(2, 0, 1, 2, color)
 	r.text(4, 0, status, color)
 	team := "A / UNITED STATES NAVY"
 	if b.State.Player == 1 {
@@ -289,6 +325,9 @@ func combatRaster(b BattlePresentation) *Raster {
 	}
 	r := New(w, h)
 	r.ocean(b.T, 0, true)
+	for i, c := range r.Pixels {
+		r.Pixels[i] = mix(c, Ink, .87)
+	}
 	accent := Gold
 	if b.State.Player == 1 {
 		accent = Green
@@ -304,12 +343,15 @@ func combatRaster(b BattlePresentation) *Raster {
 		status, color = "LINK LOST / RECONNECTING", Rust
 	}
 	if b.State.Phase == "finished" {
-		status, color = "DEFEAT / THE OCEAN HAS NEW MANAGEMENT", Rust
+		status, color = "DEFEAT", Rust
 		if b.State.Winner == b.State.Player {
-			status, color = "VICTORY / OCEAN LIBERATED", accent
+			status, color = "VICTORY", accent
 		}
 	}
 	r.combatHeader(b, status, color)
+	if !b.Solo && b.State.Phase != "finished" && (!b.State.Connected[0] || !b.State.Connected[1]) {
+		r.loadingDots(r.W-24, 0, b.T)
+	}
 	target, own := CombatBoards(b.SD, b.InspectOwn)
 	r.combatBoard(b, target, false, !b.InspectOwn)
 	r.combatBoard(b, own, true, b.InspectOwn)
@@ -324,7 +366,7 @@ func combatRaster(b BattlePresentation) *Raster {
 		largeLabel, smallLabel = smallLabel, largeLabel
 	}
 	r.text(l.X, heading, largeLabel, accent)
-	r.text(smallX, heading, smallLabel, Muted)
+	r.text(smallX, heading, smallLabel, accent)
 	incoming, outgoing := latestShot(b.State, true), latestShot(b.State, false)
 	largeEvent, smallEvent := outgoing, incoming
 	prefix := "ENEMY"
@@ -368,31 +410,44 @@ func combatRaster(b BattlePresentation) *Raster {
 	}
 	for i := 0; i < 5; i++ {
 		row := fleetRow + i*step
-		col := Muted
+		col := Bone
 		health := shipHealth(b.State, i)
 		if health == 0 {
 			col = 0x5d6266
 		}
 		control := MenuControl{X: smallX, Y: row, W: l.Width, H: 1}
+		r.factionPanel(control, Panel, .9)
+		if b.InspectOwn && i < len(b.State.Own) && b.State.Own[i].Valid() {
+			for _, cell := range game.Cells(b.State.Own[i], game.Lengths[i]) {
+				if cell == b.OwnCursor {
+					r.factionPanel(control, Cyan, .15)
+					break
+				}
+			}
+		}
 		if b.Hover == fmt.Sprintf("fleet%d", i) {
 			r.factionPanel(control, 0xffffff, .08)
 			col = Bone
 		}
-		r.text(smallX, row, assets.Names[b.State.Player*5+i], col)
+		r.text(smallX, row, fmt.Sprintf("%d %s", i+1, assets.Names[b.State.Player*5+i]), col)
+		if health == 0 {
+			r.text(smallX+l.Width-5, row, "SUNK", Muted)
+			continue
+		}
 		for j := 0; j < game.Lengths[i]; j++ {
-			text, pip := "■", accent
+			text, pip := "■", chartShip
 			if j >= health {
 				text, pip = "×", Rust
 			}
 			r.text(smallX+l.Width-5+j, row, text, pip)
 		}
 	}
-	coach := fmt.Sprintf("%s / Click or Enter to fire.  Ripple miss / Fire hit", b.Cursor)
+	coach := fmt.Sprintf("%s / Click or Enter to fire.", b.Cursor)
 	if b.State.Outgoing[b.Cursor.Index()] != game.Unknown {
 		coach = fmt.Sprintf("%s / %s. Choose an unmarked cell.", b.Cursor, shotWord(b.State.Outgoing[b.Cursor.Index()]))
 	}
 	if b.State.Turn != b.State.Player {
-		coach = "Enemy taking aim. You can inspect either chart while waiting."
+		coach = "Your opponent is aiming. You can check your fleet while you wait."
 	}
 	if b.InspectOwn {
 		coach = fmt.Sprintf("YOUR WATERS / %s / %s. Tab returns to targeting.", b.OwnCursor, shotWord(b.State.Incoming[b.OwnCursor.Index()]))
@@ -413,10 +468,10 @@ func combatRaster(b BattlePresentation) *Raster {
 		}
 	}
 	if b.Pending {
-		coach = "Shot transmitted. Awaiting result."
+		coach = "Sending your shot…"
 	}
 	if !b.State.Connected[0] || !b.State.Connected[1] {
-		coach = "Battle paused until both commanders reconnect."
+		coach = "Battle paused. Reconnecting…"
 	}
 	if b.State.Phase == "finished" {
 		shots, hits := 0, 0
@@ -434,28 +489,38 @@ func combatRaster(b BattlePresentation) *Raster {
 		}
 		coach = fmt.Sprintf("%d shots / %d hits / %d%% accuracy. Inspect the charts or play again.", shots, hits, accuracy)
 		if b.State.Rematch[b.State.Player] || b.Pending {
-			coach = "Rematch requested. Waiting for the other commander."
+			coach = "Rematch requested. Waiting for your opponent."
 			if b.Solo {
-				coach = "Preparing the next battle..."
+				coach = "Preparing the next battle…"
 			}
 		}
 	}
 	if b.Notice != "" {
 		coach = b.Notice
 	}
-	r.plaque(2, l.Coach, w-4, 1, Ink)
+	legendRow := 38
+	if b.SD {
+		legendRow = 19
+	}
+	r.chartLegend(l.X, legendRow)
+	hintRow := 44
+	if b.SD {
+		hintRow = 22
+	}
+	hint := "Click the small chart to switch views. Numbers match your fleet."
+	if !b.Solo && b.State.Phase != "finished" && (!b.State.Connected[0] || !b.State.Connected[1]) {
+		hint = "J  Paste a fresh invitation if reconnecting takes too long."
+		if b.Host {
+			hint = "I  Share a fresh invitation if your friend cannot reconnect."
+		}
+	}
+	r.text(4, hintRow, hint, Muted)
+	r.rect(2, l.Coach*2, w-4, 2, Panel)
+	r.rect(2, l.Coach*2, 1, 2, color)
 	r.text(4, l.Coach, short(coach, w-8), Bone)
 	r.combatButtons(b)
 	if b.CombatHelp {
-		lines := []string{"FIRE CONTROL", "", "Mouse / arrows / WASD    Aim at hostile waters", "Click / Enter            Fire one shot", "Tab / click small chart  Switch chart focus", "Click a fleet name       Inspect that ship", "Ripple = miss   Fire = hit   Wreck = sunk", "A-J are columns; 1-10 are rows (B4 = column B, row 4).", "", "A hit does not grant an extra shot.", "Only confirmed enemy contacts appear on the chart.", "Space / Enter skips shot cinematics.", "", "Click / ? / Esc close"}
-		r.Texts = nil
-		width := min(68, w-8)
-		left := (w - width) / 2
-		top := (h - len(lines) - 2) / 2
-		r.plaque(left, top, width, len(lines)+2, Ink)
-		for i, line := range lines {
-			r.text(left+2, top+1+i, line, Bone)
-		}
+		r.combatGuide(b.SD, accent)
 	}
 	return r
 }

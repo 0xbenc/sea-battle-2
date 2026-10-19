@@ -21,7 +21,7 @@ func RenderJoin(sd bool, t float64, idle MenuIdle, notice, hover string, rejoin 
 		r.text(left+2, 15*scale, "Use a fresh invitation from the same host.", Muted)
 	}
 	if notice != "" && notice != "Please paste an invitation." {
-		r.text(left, 18*scale, short(notice, width), Cyan)
+		r.noticeBox(left, 18*scale, width, notice, Rust)
 	}
 	r.pageFooter(sd, hover)
 	return r.frame()

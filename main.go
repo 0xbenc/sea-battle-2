@@ -236,6 +236,7 @@ func saveCapture(s visual.State) error {
 	return os.WriteFile(filepath.Join("captures", name), b, 0644)
 }
 func run() error {
+	previewResults := flag.Bool("preview-results", false, "preview all eight victory/defeat scenes without a match")
 	lookdev := flag.Bool("lookdev", false, "open the scripted art review")
 	difficulty := flag.String("difficulty", "medium", "solo bot: easy, medium or hard")
 	solo := flag.String("solo", "", "single player faction: american or alien")
@@ -320,6 +321,13 @@ func run() error {
 	}
 	if *size != "hd" && *size != "sd" {
 		return fmt.Errorf("size must be hd or sd")
+	}
+	if *previewResults {
+		if artMode || *host || *join != "" || *solo != "" {
+			return fmt.Errorf("--preview-results is separate from live play and lookdev")
+		}
+		_, err := tea.NewProgram(resultPreview{compact: *size == "sd"}, tea.WithColorProfile(colorprofile.TrueColor)).Run()
+		return err
 	}
 	if !artMode {
 		if *join != "" {

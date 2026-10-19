@@ -4,7 +4,7 @@ package visual
 func RenderCredits(sd bool, t float64, idle MenuIdle, hover string) *Frame {
 	r := frontOcean(sd, t, idle)
 	for i, color := range r.Pixels {
-		r.Pixels[i] = mix(color, Ink, .60)
+		r.Pixels[i] = mix(color, Ink, .80)
 	}
 	title, first, gap := 2, 6, 3
 	if !sd {

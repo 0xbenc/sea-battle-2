@@ -89,3 +89,22 @@ func TestCombatInspectionDoesNotFireOrMoveAim(t *testing.T) {
 		}
 	}
 }
+
+func TestCinematicSkipMouseMatchesKeyboard(t *testing.T) {
+	for _, sd := range []bool{true, false} {
+		m := placementModel(t, sd)
+		m.state.Phase = "battle"
+		after := cloneView(*m.state)
+		m.clips = []shotPlayback{{Event: game.Event{Player: m.state.Player, At: game.Coord{}, Ship: -1}, After: after}}
+		m.clipTime = .5
+		c := visual.CombatControls(m.battlePresentation())[0]
+		w, h := 160, 48
+		if m.sd() {
+			w, h = 80, 24
+		}
+		m = apply(m, tea.MouseClickMsg(tea.Mouse{X: c.X + (m.width-w)/2, Y: c.Y + (m.height-h)/2, Button: tea.MouseLeft}))
+		if len(m.clips) != 0 {
+			t.Fatal("clicking Skip did not finish cinematic")
+		}
+	}
+}

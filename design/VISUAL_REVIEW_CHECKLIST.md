@@ -2,6 +2,10 @@
 
 Persistent review ledger for the launch polish pass. Inventory checked against the current render paths on 2026-10-19. Visual approvals and requested changes are tracked below.
 
+## Result preview
+
+Run `make preview-results` to view all eight real result-screen variants without playing. Use **1–8** or **Left/Right** to change outcomes, **Tab** for final charts, **R** for rematch-waiting text, **Space** to pause animation, **D** for compact size, and **Q** to exit. This mode does not start a game session or network connection.
+
 ## Review rules
 
 - Status: **Needs review → Changes requested → Ready for review → Approved**.
@@ -26,38 +30,38 @@ These are review units, not a count of independent renderer functions. Some shar
 | [ ] | V05 | Host: preparing invitation | Menu → H | Helper download/startup, progress, ability to arrange fleet, setup failure/retry | Ready for review — status panel, spaced instructions, clickable fleet/leave footer. |
 | [ ] | V06 | Host: invitation ready | Host → I; initially shown when ready | Copy/save controls, feedback/errors, direct/public status, updated invitation | Ready for review — status panel, copy/save buttons, numbered sharing steps, clickable footer. |
 | [ ] | V07 | Guest: join invitation | Menu → J | Automatic clipboard read, immediate paste-to-connect, invalid/expired invitation coaching, clickable footer | Ready for review — simplified automatic Join. |
-| [ ] | V08 | Connecting / route negotiation | Join → Enter; session startup | Secure connection progress, automatic negotiation, slow/failing setup, cancel | Ready for review — centered status panel, animated dots, brief coaching and clickable Cancel/Quit. |
+| [ ] | V08 | Connecting / route negotiation | Join → clipboard/paste; session startup | Secure connection progress, automatic negotiation, slow/failing setup, cancel | Ready for review — centered status panel, animated dots, brief coaching and clickable Cancel/Quit. |
 | [ ] | V09 | Guest: update invitation / rejoin | Disconnected guest → J | Automatic clipboard/paste route update, same-session coaching, invalid replacement, cancel | Ready for review — no Enter required. |
-| [ ] | V10 | Fleet deployment | Solo or multiplayer → arrange fleet | Empty/partial/full fleet; all five ships; horizontal/vertical previews; legal/blocked placement; move/remove/undo | Needs review |
-| [ ] | V11 | Deployment: submitting / waiting | Deploy → Space | Launching, fleet locked, opponent not ready, disconnected while arranging | Needs review |
-| [ ] | V12 | Deployment help overlay | Deployment → ? | Readability over board, complete controls, close affordance | Needs review |
-| [ ] | V13 | Battle: targeting enemy waters | Both fleets ready | Your/enemy turn, sending shot, selected cell, unshot/miss/hit/sunk marks, damaged fleet, notices | Needs review |
-| [ ] | V14 | Battle: inspect own waters | Battle → Tab / click own chart / fleet name | Swapped chart focus, ship inspection, return to targeting | Needs review |
-| [ ] | V15 | Battle help overlay | Battle → ? | Readability over charts, key legend, close affordance; also accessible after match | Needs review |
-| [ ] | V16 | Enemy-turn transition | Opponent shot playback | Multiplayer ENEMY TAKING AIM / INCOMING FIRE; solo fade transition | Needs review |
-| [ ] | V17 | Miss cinematic | A shot misses | YOU MISSED / THEY MISSED, splash timing, transition/skip | Needs review |
-| [ ] | V18 | Hit cinematic | A shot hits without sinking | YOU HIT / YOU WERE HIT, anonymous enemy hit vs known own hull, both factions | Needs review |
-| [ ] | V19 | Sinking cinematic | Final hit on a ship | SUNK title and ship name; all ten hulls across both fleets; transition/skip | Needs review |
-| [ ] | V20 | Victory result | Win a match | Both factions × close/overwhelming victory; stats, artwork, footer controls | Needs review |
-| [ ] | V21 | Defeat result | Lose a match | Both factions × narrow/overwhelming defeat; stats, artwork, footer controls | Needs review |
-| [ ] | V22 | Post-match charts | Result → Tab | Final boards, victory/defeat header, fleet condition, return to result | Needs review |
-| [ ] | V23 | Rematch waiting | Result / finished charts → R | Waiting for other commander; solo preparing next battle; disabled/requested control | Needs review |
-| [ ] | V24 | Leave / quit confirmation | Active session → Q or return to menu | Solo progress warning, host ends-session warning, guest disconnect warning, confirm/cancel | Needs review |
-| [ ] | V25 | Connection lost / recovery states | Interrupt an active multiplayer link | Battle LINK LOST / RECONNECTING; deployment waiting; notices; restored session; new invitation path | Needs review |
-| [ ] | V26 | Errors and feedback across views | Invalid input, failed startup/action, clipboard/save failures | Menu failure notice; inline action errors; long messages; success feedback; no overlap with controls | Needs review |
-| [ ] | V27 | Terminal too small | Resize below 80 columns or 24 rows | Current/required dimensions, resize instructions, recovery to prior view | Needs review |
+| [x] | V10 | Fleet deployment | Solo or multiplayer → arrange fleet | Empty/partial/full fleet; all five ships; horizontal/vertical previews; legal/blocked placement; move/remove/undo | Approved — user: “much better!” on deployment redesign; reviewed display size/faction unspecified. |
+| [ ] | V11 | Deployment: submitting / waiting | Deploy → Space | Launching, fleet locked, opponent not ready, disconnected while arranging | Ready for review — explicit ready heading, READY ship labels, green locked control, concise waiting/reconnect copy. |
+| [x] | V12 | Deployment help overlay | Deployment → ? | Three-step Pick/Turn/Place guide, concise shortcuts, close affordance | Approved — user: “looks good”; reviewed display size unspecified. |
+| [x] | V13 | Battle: targeting enemy waters | Both fleets ready | Your/enemy turn, sending shot, selected cell, unshot/miss/hit/sunk marks, damaged fleet, notices | Approved — user: “good stuff” on battle-screen redesign; reviewed size/faction unspecified. |
+| [x] | V14 | Battle: inspect own waters | Battle → Tab / click own chart / fleet name | Swapped chart focus, ship inspection, return to targeting | Approved as part of battle-screen redesign; reviewed size/faction unspecified. |
+| [x] | V15 | Battle help overlay | Battle → ? | Aim/Fire/Check cards, colored shot legend, close affordance; also accessible after match | Approved — user: “good stuff”; reviewed display size unspecified. |
+| [x] | V16 | Enemy-turn transition | Opponent shot playback | Incoming-fire interstitial; faster 0.8-second solo fade transition | Approved — user: “great stuff”; reviewed variants unspecified. |
+| [x] | V17 | Miss cinematic | A shot misses | MISS with incoming/outgoing header, three splash takes, transition/skip | Approved — user: “great stuff”; reviewed variants unspecified. |
+| [x] | V18 | Hit cinematic | A shot hits without sinking | HIT with incoming/outgoing header, anonymous enemy impact vs known own hull, both factions | Approved — user: “great stuff”; reviewed variants unspecified. |
+| [x] | V19 | Sinking cinematic | Final hit on a ship | SUNK title and ship name; all ten hulls across both fleets; transition/skip | Approved — user: “great stuff”; reviewed variants unspecified. |
+| [x] | V20 | Victory result | Win a match | Both factions × close/overwhelming victory; stats, artwork, footer controls | Approved — artwork accepted; user supplied final quips. |
+| [x] | V21 | Defeat result | Lose a match | Both factions × narrow/overwhelming defeat; stats, artwork, footer controls | Approved — artwork accepted; user supplied final quips. |
+| [x] | V22 | Post-match charts | Result → Tab | Final boards, victory/defeat header, fleet condition, return to result | Approved — user: “both are fine”. |
+| [x] | V23 | Rematch waiting | Result / finished charts → R | Waiting for other commander; solo preparing next battle; disabled/requested control | Approved with consistency sweep — waiting copy shortened; disabled Rematch no longer highlights. |
+| [ ] | V24 | Leave / quit confirmation | Active session → Q or return to menu | Solo progress warning, host ends-session warning, guest disconnect warning, confirm/cancel | Ready for review — themed status panel, centered clickable Stay/Leave buttons, concise role-specific copy. |
+| [ ] | V25 | Connection lost / recovery states | Interrupt an active multiplayer link | Battle LINK LOST / RECONNECTING; deployment waiting; notices; restored session; new invitation path | Ready for review |
+| [ ] | V26 | Errors and feedback across views | Invalid input, failed startup/action, clipboard/save failures | Startup failure page; inline action errors; long messages; success feedback; no overlap with controls | Ready for review |
+| [x] | V27 | Terminal too small | Resize below 80 columns or 24 rows | Current/required dimensions, resize instructions, recovery to prior view | Approved — user: “yo thats soo coooL!”; size unspecified. |
 
 ## Shared visual alignment
 
-- [ ] X01 — Consistent secondary-screen layout: manual, settings, join/rejoin, connecting, invitation, leave confirmation.
-- [ ] X02 — Consistent deployment/combat/results headers, margins, key labels, footers, and faction colors.
-- [ ] X03 — SD completeness: no truncated instructions, missing actions, overlaps, or offscreen notices.
-- [ ] X04 — HD composition and centering; transitions between SD and HD preserve usable layouts.
-- [ ] X05 — Mouse hover/pressed/focus feedback agrees with keyboard controls; unavailable actions look unavailable.
-- [ ] X06 — Cinematic entry/exit and result transitions feel coherent; text stays legible throughout animation.
-- [ ] X07 — Network progress, failures, recovery, and clipboard/save feedback use consistent plain language.
+- [x] X01 — Consistent secondary-screen layout: manual, settings, join/rejoin, connecting, invitation, leave confirmation.
+- [x] X02 — Consistent deployment/combat/results headers, margins, key labels, footers, and faction colors.
+- [x] X03 — SD completeness: no truncated instructions, missing actions, overlaps, or offscreen notices.
+- [x] X04 — HD composition and centering; transitions between SD and HD preserve usable layouts.
+- [x] X05 — Mouse hover/pressed/focus feedback agrees with keyboard controls; unavailable actions look unavailable.
+- [x] X06 — Cinematic entry/exit and result transitions feel coherent; text stays legible throughout animation.
+- [x] X07 — Network progress, failures, recovery, and clipboard/save feedback use consistent plain language.
 
-All shared checks start at **Needs review**. Checkboxes require user approval.
+Shared checks X01–X07 are **Approved** — user: “It's looking awesome!” after the consistency sweep. SD/HD front screens and representative gameplay states inspected; both-faction terminal placement, combat and solo flows passed. Screenshot review is representative, not every animation frame or live network failure.
 
 ## Scripted art review (separate from normal gameplay)
 
@@ -155,6 +159,46 @@ Run `./bin/sea-battle --lookdev`; Tab opens the scene picker and ? opens lookdev
 | 2026-10-19 | V08 | Replaced old Connecting text block with shared ocean styling, centered status/loading panel and short coaching. Added matching hoverable/clickable Cancel and Quit footer. Inspected SD/HD captures; cancel navigation tested including larger-terminal centering. | Ready for review. |
 
 | 2026-10-19 | V10 / V12 / V03 | Scroll up/down over the deployment board rotates the selected preview, like X/right-click. Updated help/manual controls. Verified both directions, no placement side effect, help overlay and locked fleet guards in SD/HD. | Ready for review. |
+
+| 2026-10-19 | Checkpoint | Committed functional UI and connection work as 12bde68 before deployment redesign. | Local commit; not pushed. |
+| 2026-10-19 | V10 / V11 / V12 | Deployment redesign: dark chart, quiet grid, corner accents, faction-colored ship cards, explicit placement states, readiness meter, larger centered Launch, calmer coaching/footer and dimmed help backdrop. Board geometry and placement actions retained. | Ready for review; redesign uncommitted. |
+
+| 2026-10-19 | V10 | User approved deployment redesign: “much better!” | Approved; reviewed display size/faction unspecified. |
+
+| 2026-10-19 | V11 | One-pass waiting-state polish: YOUR FLEET IS READY heading, READY ship labels, green locked control, separate confirming/waiting/reconnecting copy; removed active placement hints once locked. | Ready for review. |
+
+| 2026-10-19 | V12 | Replaced dense controls list with three Pick/Turn/Place cards, short key hints, shuffle/undo, and a brief no-overlap rule. Inspected SD/HD screenshots; visual/play tests pass. | Ready for review. |
+
+| 2026-10-19 | V12 | User: “looks good”. | Approved; reviewed display size unspecified. |
+
+| 2026-10-19 | V13 / V14 / V15 / V22 | Rebuilt charts around solid colors and redundant marks: numbered teal ship cells, blue miss dots, orange hit Xs and gray sunk #s. Fleet numbers match chart; dead ships labeled SUNK; expanded inspection highlights ship row. Darkened scene, improved header/fire control/coaching and added legend/view-switch hint. Updated battle help legend. Inspected both chart views in SD/HD; real terminal checks passed for both factions, including inspection, aiming, firing, bot response and repeat-shot gate. Tile-state and hidden-information tests passed. | Ready for review. |
+
+| 2026-10-19 | V13 / V14 | User: “good stuff” on battle-screen redesign. | Approved; reviewed size/faction unspecified. |
+
+| 2026-10-19 | V15 | Replaced dense battle-help list with Aim/Fire/Check cards, shot legend, short fleet-inspection and animation-skip hints. | Ready for review. |
+
+| 2026-10-19 | V15 | User: “good stuff”. | Approved; reviewed display size unspecified. |
+
+| 2026-10-19 | V16–V19 | Unified cinematic header, result title, color palette and clickable Skip footer. Added three stable shot-selected takes with varied cameras, impact framing, weather and captions. Shortened solo handoff to 0.8s; kept outcome durations. Checked outgoing/incoming SD/HD frames, all known hulls, deterministic redraws and hidden-identity protection. | Ready for review. |
+
+| 2026-10-19 | V16–V19 | User: “great stuff”. | Approved; reviewed variants unspecified. |
+
+| 2026-10-19 | V20 / V21 | User likes result artwork; requested editing quips. Moved all eight result quips into internal/visual/result_quips.json. | Artwork accepted; copy pending user edits. |
+
+| 2026-10-19 | V20 / V21 | User completed all eight result quips. Validated JSON, compact-width fit and result scenes; rebuilt without changing wording. | Approved. |
+
+| 2026-10-19 | V22 / V23 | User: “both are fine”. | Approved. |
+
+| 2026-10-19 | V24 | Restyled all leave confirmations with matching dark ocean, status panel and Stay/Leave buttons. Copy distinguishes solo progress loss, ending both players’ session as host, and guest disconnect; states whether Leave exits or returns to menu. Inspected solo/host/guest screenshots and tested mouse navigation in SD/HD/larger terminals. | Ready for review. |
+
+| 2026-10-19 | V25 / V26 | Aligned notices with shared dark panels and accent stripes; added a startup-failure page with Back/Quit, plain-language action errors, animated reconnect dots, and host/guest invitation shortcuts. Inspected compact and HD screenshots. Play/visual tests and two-terminal disconnect/reconnect review passed, including restored shot history. | Ready for review. |
+
+| 2026-10-19 | V27 | Replaced plain resize text with themed responsive panel, width/height meters that turn teal when sufficient, short coaching and matching footer. Compact fallback for tiny windows. Inspected terminal screenshots; verified five sizes and automatic return to menu/faction screens. Visual/play tests passed. | Ready for review. |
+
+| 2026-10-19 | V27 | User: “yo thats soo coooL!” | Approved; size unspecified. |
+| 2026-10-19 | X01–X07 / V02–V09 / V23 / V26 / V28 | Two-pass consistency review: aligned faction title/footer, subdued faction/credits backgrounds, spaced settings feedback and colored failures rust, shortened connection/rematch copy, wrapped connection messages, and fixed Unicode-safe truncation. Disabled rematch hover/press and pending fleet hover no longer suggest an available action. Preserved user-authored quips. SD/HD contact sheets and revised individual screenshots inspected; all Go tests/vet and both-faction placement/combat/solo terminal flows passed. | Ready for review; V23 waiting-state change needs re-review. |
+
+| 2026-10-19 | X01–X07 / V23 | User: “It's looking awesome!” after the consistency sweep. Front-screen navigation also passed in SD, HD and larger centered terminals. | Approved; user-reviewed variants unspecified. |
 
 ## Source map
 

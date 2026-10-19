@@ -45,15 +45,12 @@ func TestBattlePresentation(t *testing.T) {
 				f := RenderBattle(b)
 				r := New(f.W, f.H)
 				r.battleClip(b, DefaultState())
-				labels := 0
-				if e.Sunk {
-					labels = 1 // Only the destroyed ship's name accompanies the pixel title.
+				controls := CombatControls(b)
+				if len(controls) != 1 || controls[0].Key != "space" || !strings.Contains(f.Plain(), "SPACE / ENTER Skip") {
+					t.Fatal("cutscene skip control missing")
 				}
-				if len(r.Texts) != labels || len(CombatControls(b)) != 0 {
-					t.Fatal("cutscene has extra labels or invisible mouse controls")
-				}
-				if strings.Contains(f.Plain(), "J10") || strings.Contains(f.Plain(), "TRANSMISSION") {
-					t.Fatal("cutscene contains tactical clutter")
+				if !strings.Contains(f.Plain(), "J10") || strings.Contains(f.Plain(), "TRANSMISSION") {
+					t.Fatal("cutscene must identify shot without old console clutter")
 				}
 				if e.Ship < 0 && strings.Contains(f.Plain(), "Hive Carrier") {
 					t.Fatal("unidentified enemy leaked")

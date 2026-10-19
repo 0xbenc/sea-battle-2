@@ -214,38 +214,16 @@ func RenderResult(b BattlePresentation) *Frame {
 		}
 	}
 	r.center(sub, grade, Bone)
-	line := "Victory. Repairs sold separately."
-	if b.State.Player == 0 {
-		if won && dominant {
-			line = "Pest control. Now with a navy."
-		}
-		if !won {
-			line = "They ate the victory speech."
-			if dominant {
-				line = "Humanity has been reassigned to seafood."
-			}
-		}
-	} else {
-		line = "The brood lives. Mostly."
-		if won && dominant {
-			line = "All-you-can-eat democracy."
-		}
-		if !won {
-			line = "Evolution will be filing an appeal."
-			if dominant {
-				line = "The food chain has been amended."
-			}
-		}
-	}
+	line := resultQuip(b.State.Player, won, dominant)
 	r.center(quip, line, Bone)
 	owner := "YOUR"
 	if !won {
 		owner = "ENEMY"
 	}
 	if b.Pending || b.State.Rematch[b.State.Player] {
-		line = "Waiting for the other commander..."
+		line = "Waiting for your opponent…"
 		if b.Solo {
-			line = "Preparing the next battle..."
+			line = "Preparing the next battle…"
 		}
 		r.center(stats, line, Bone)
 	} else {
@@ -256,7 +234,7 @@ func RenderResult(b BattlePresentation) *Frame {
 		if c.Key == "r" && (b.Pending || b.State.Rematch[b.State.Player]) {
 			color = Muted
 		}
-		if b.Hover == c.Key {
+		if b.Hover == c.Key && !(c.Key == "r" && (b.Pending || b.State.Rematch[b.State.Player])) {
 			r.factionPanel(c, 0xffffff, .12)
 		}
 		r.text(c.X, c.Y, c.Label, color)

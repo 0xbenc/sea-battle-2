@@ -55,3 +55,26 @@ func TestPressFollowsDisplayResizeAndDoesNotLeakScreens(t *testing.T) {
 		t.Fatal("press leaked to another screen")
 	}
 }
+
+func TestUnavailableCombatActionDoesNotFlash(t *testing.T) {
+	for _, sd := range []bool{true, false} {
+		m := combatModel(t, sd)
+		m.pending = true
+		m.markPress("enter")
+		if m.pressedKey != "" {
+			t.Fatal("unavailable fire flashes as enabled")
+		}
+		m.pending = false
+		m.markPress("enter")
+		if m.pressedKey != "enter" {
+			t.Fatal("available fire lost press feedback")
+		}
+		m.pressedKey = ""
+		m.state.Phase = "finished"
+		m.state.Rematch[m.state.Player] = true
+		m.markPress("r")
+		if m.pressedKey != "" {
+			t.Fatal("requested rematch flashes as enabled")
+		}
+	}
+}

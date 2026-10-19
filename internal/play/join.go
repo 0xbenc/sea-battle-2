@@ -97,7 +97,10 @@ func (m *Model) acceptInvitation(content string, pasted bool) tea.Cmd {
 	if _, err := peer.ParseInvitation(code); err != nil {
 		if pasted {
 			m.input = ""
-			m.notice = "Please paste a complete, current invitation from your friend."
+			m.notice = "That invitation looks incomplete. Please paste the whole thing."
+			if strings.Contains(err.Error(), "expired") {
+				m.notice = "That invitation has expired. Ask your friend for a new one."
+			}
 		}
 		return nil
 	}

@@ -53,17 +53,7 @@ func RenderInvitation(sd bool, t, progressTime float64, idle MenuIdle, ready boo
 		label, color = "YOUR INVITATION IS READY", Green
 	}
 	// Center the complete text block, including any wrapped connection status.
-	lines := []string{}
-	words := strings.Fields(status)
-	for len(lines) < 2 && len(words) > 0 {
-		line := words[0]
-		words = words[1:]
-		for len(words) > 0 && len(line)+1+len(words[0]) <= width-14 {
-			line += " " + words[0]
-			words = words[1:]
-		}
-		lines = append(lines, short(line, width-14))
-	}
+	lines := wrapMessage(status, width-14)
 	blockHeight := 1
 	if len(lines) > 0 {
 		blockHeight = scale + len(lines)
@@ -115,7 +105,11 @@ func RenderInvitation(sd bool, t, progressTime float64, idle MenuIdle, ready boo
 		r.text(x, y, c.Label, color)
 	}
 	if notice != "" && !strings.HasPrefix(notice, "Saved to: ") {
-		r.text(left, 20*scale, short(notice, width), Cyan)
+		color := Cyan
+		if strings.HasPrefix(notice, "Couldn") {
+			color = Rust
+		}
+		r.noticeBox(left, 19*scale, width, notice, color)
 	}
 	footer := controls[0].Y
 	r.line(left, (footer-1)*2, r.W-left-1, (footer-1)*2, mix(Muted, Ink, .65))

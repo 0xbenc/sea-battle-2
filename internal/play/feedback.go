@@ -15,7 +15,7 @@ func (m Model) feedbackControls() (string, []visual.MenuControl) {
 		return "faction", visual.FactionControls(m.sd())
 	case "settings":
 		return "settings", visual.SettingsControls(m.sd())
-	case "help", "credits", "join", "rejoin":
+	case "help", "credits", "join", "rejoin", "problem":
 		return m.mode, visual.FooterControls(m.sd())
 	}
 	if m.connectingScreen() {
@@ -40,6 +40,9 @@ func (m *Model) markPress(key string) {
 	}
 	for _, c := range controls {
 		if c.Key == key {
+			if screen == "combat" && !visual.CombatControlEnabled(m.battlePresentation(), key) {
+				return
+			}
 			m.pressedKey, m.pressedScreen, m.pressedAt = key, screen, m.t
 			return
 		}

@@ -177,19 +177,13 @@ func (m *Model) finishClip() {
 	}
 }
 
-const handoffDuration = 2.0
+const handoffDuration = 0.8
 
 func (m Model) handoff() bool {
 	return m.solo && m.state != nil && len(m.clips) > 0 && m.clips[0].Player != m.state.Player
 }
 func (m Model) clipDuration() float64 {
-	duration := 3.5
-	if !m.clips[0].Hit {
-		duration = 2
-	}
-	if m.clips[0].Sunk {
-		duration = 6
-	}
+	duration := visual.ShotDuration(m.clips[0].Event)
 	if m.handoff() {
 		duration += handoffDuration
 	}
@@ -212,7 +206,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menuHover = ""
 		m.width, m.height = v.Width, v.Height
 	case tea.MouseMsg:
-		if (m.mode != "menu" && m.mode != "faction" && m.mode != "settings" && m.mode != "help" && m.mode != "credits" && m.mode != "join" && m.mode != "rejoin" && !m.connectingScreen() && !(m.invitation && m.host) && !m.placementScreen() && !m.combatScreen()) || m.quitting || !m.fits() {
+		if m.quitting {
+			if !m.fits() {
+				return m, nil
+			}
+			mouse := v.Mouse()
+			w, h := 160, 48
+			if m.sd() {
+				w, h = 80, 24
+			}
+			m.menuHover = visual.LeaveControlAt(m.sd(), mouse.X-(m.width-w)/2, mouse.Y-(m.height-h)/2)
+			if _, clicked := v.(tea.MouseClickMsg); clicked && mouse.Button == tea.MouseLeft && m.menuHover != "" {
+				return m.Update(tea.KeyPressMsg(tea.Key{Code: []rune(m.menuHover)[0]}))
+			}
+			return m, nil
+		}
+		if (m.mode != "menu" && m.mode != "faction" && m.mode != "settings" && m.mode != "help" && m.mode != "credits" && m.mode != "problem" && m.mode != "join" && m.mode != "rejoin" && !m.connectingScreen() && !(m.invitation && m.host) && !m.placementScreen() && !m.combatScreen()) || m.quitting || !m.fits() {
 			return m, nil
 		}
 		mouse := v.Mouse()
@@ -234,7 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.invitation && m.host {
 			m.menuHover = visual.InvitationControlAt(m.sd(), m.invite != "", x, y)
 		}
-		if m.mode == "help" || m.mode == "credits" || m.mode == "join" || m.mode == "rejoin" {
+		if m.mode == "help" || m.mode == "credits" || m.mode == "problem" || m.mode == "join" || m.mode == "rejoin" {
 			m.menuHover = visual.FooterControlAt(m.sd(), x, y)
 		}
 		if m.mode == "settings" {
@@ -328,7 +337,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if v.Invitation != "" {
 			if m.invite != "" && m.invite != v.Invitation {
-				m.notice = "Reconnect routes updated. I then C copies the current invitation."
+				m.notice = "Invitation updated. Press I, then C to share the new copy."
 			}
 			m.invite = v.Invitation
 		}
@@ -348,9 +357,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.State == session.Failed {
 			m.offline = true
 			m.pending = false
-			m.notice = v.Error
+			m.notice = actionError(v.Error)
 			if m.state == nil {
-				m.mode = "menu"
+				m.mode = "problem"
 				if m.joinAttempt {
 					m.mode = "join"
 					m.input = ""
@@ -440,19 +449,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.invitation = false
 			}
 		case "error":
-			m.notice = v.Error
+			m.notice = actionError(v.Error)
 			m.pending = false
 		case "offline":
 			m.offline = true
 			m.pending = false
-			m.notice = "Link interrupted. Retrying automatically; J updates guest routes."
+			m.notice = "Connection interrupted. Reconnecting…"
 		case "negotiating":
 			m.connectionStatus = "Finding the best connection…"
 		case "connecting":
 			m.offline = true
 		case "fatal":
 			m.offline = true
-			m.notice = v.Error
+			m.notice = actionError(v.Error)
 			return m, nil
 		}
 		return m, nil
@@ -462,11 +471,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if v.err != nil {
 			m.pending = false
-			m.notice = v.err.Error()
+			m.notice = actionError(v.err.Error())
 		}
 	case saved:
 		if v.err != nil {
-			m.notice = v.err.Error()
+			m.notice = "Couldn't save invitation.txt. Check folder permissions, then try S again."
 		} else {
 			m.notice = "Saved to: " + v.path
 		}
@@ -617,6 +626,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.fits() {
 			return m, nil
 		}
+		if m.mode == "problem" {
+			if k == "esc" {
+				m.mode = "menu"
+				m.notice = ""
+			}
+			return m, nil
+		}
 		if m.mode == "credits" {
 			if k == "esc" {
 				m.mode = "settings"
@@ -657,9 +673,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "t":
 				m.mode, m.notice = "settings", ""
 			case "s":
+				m.joinAttempt = false
 				m.mode = "faction"
 				m.notice = ""
 			case "h":
+				m.joinAttempt = false
 				m.mode = "connecting"
 				return m, m.startHost()
 			case "j":
@@ -771,11 +789,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		} else if m.state.Phase == "battle" && k == "enter" && !m.pending && !m.offline {
 			if !m.state.Connected[0] || !m.state.Connected[1] {
-				m.notice = "Both commanders must be connected."
+				m.notice = "Waiting for your opponent to reconnect."
 			} else if m.state.Turn != p {
-				m.notice = "Wait for your turn."
+				m.notice = "It's your opponent's turn."
 			} else if m.state.Outgoing[m.cursor.Index()] != game.Unknown {
-				m.notice = "That square has already been fired on."
+				m.notice = "You've already tried that square. Pick another one."
 			} else {
 				m.pending = true
 				return m, m.send(peer.Command{Type: "fire", At: m.cursor})
@@ -831,19 +849,16 @@ func writeInvitation(path, code string) error {
 func (m Model) View() tea.View {
 	var f *visual.Frame
 	switch {
+	case !m.fits():
+		f = visual.RenderResize(m.width, m.height)
 	case m.quitting:
-		detail := "Disconnect from the battle?"
-		if m.solo {
-			detail = "Leave this battle? Progress will be lost."
-		}
-		if m.host {
-			detail = "Closing the host ends this session for both players."
-		}
-		f = m.front("LEAVE COMMAND?", []string{detail, "", "Y / ENTER leave    N / ESC return"})
+		f = visual.RenderLeave(m.sd(), m.menuTime, m.menu.Snapshot(), m.solo, m.host, m.returnMenu, m.menuHover)
 	case m.mode == "menu":
 		reaction := m.menuReaction
 		reaction.Age = m.t - m.reactionStart
 		f = visual.RenderMenuWithHover(m.sd(), m.menuTime, m.notice, m.menuHover, m.menu.Snapshot(), reaction)
+	case m.mode == "problem":
+		f = visual.RenderProblem(m.sd(), m.menuTime, m.menu.Snapshot(), m.notice, m.menuHover)
 	case m.mode == "help":
 		f = visual.RenderManual(m.sd(), m.menuTime, m.menu.Snapshot(), m.menuHover)
 	case m.mode == "settings":
@@ -862,10 +877,12 @@ func (m Model) View() tea.View {
 	default:
 		f = visual.RenderBattle(m.battlePresentation())
 	}
-	m.drawPress(f)
+	if m.fits() {
+		m.drawPress(f)
+	}
 	content := ""
 	if !m.fits() {
-		content = fmt.Sprintf("SEA BATTLE 2\nNeed 80 x 24. Current: %d x %d.\nEnlarge the terminal. Ctrl+C quits.", m.width, m.height)
+		content = f.ANSI()
 	} else {
 		lines := strings.Split(f.ANSI(), "\n")
 		pad := strings.Repeat(" ", max(0, (m.width-f.W)/2))
@@ -876,7 +893,7 @@ func (m Model) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
-	if (m.mode == "menu" || m.mode == "faction" || m.mode == "settings" || m.mode == "help" || m.mode == "credits" || m.mode == "join" || m.mode == "rejoin" || m.connectingScreen() || (m.invitation && m.host) || m.placementScreen() || m.combatScreen()) && !m.quitting && m.fits() {
+	if (m.quitting || m.mode == "menu" || m.mode == "faction" || m.mode == "settings" || m.mode == "help" || m.mode == "credits" || m.mode == "problem" || m.mode == "join" || m.mode == "rejoin" || m.connectingScreen() || (m.invitation && m.host) || m.placementScreen() || m.combatScreen()) && m.fits() {
 		v.MouseMode = tea.MouseModeAllMotion
 	}
 	v.WindowTitle = "Sea Battle 2 / Live command"

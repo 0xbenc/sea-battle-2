@@ -40,7 +40,7 @@ def main():
                         text=cell(9,0)
                         assert 'FLEET  5 / 5' in text and 'Fleet ready.' in text,'edit ship'
                         t.capture(f'placement-ready-{team}-{"hd" if hd else "sd"}.png')
-                        t.key('?');assert 'PLACEMENT CONTROLS' in t.read(.2),'help'
+                        t.key('?');assert 'PLACE YOUR FLEET' in t.read(.2),'help'
                         t.key('?');t.read(.2)
                         text=click(side+2,actions+4)
                         assert 'YOUR TURN' in text and 'HOSTILE WATERS' in text,'launch into battle'

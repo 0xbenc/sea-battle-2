@@ -39,8 +39,8 @@ func RenderManual(sd bool, t float64, idle MenuIdle, hover string) *Frame {
 		{"", "Hits end your turn."},
 	})
 	r.text(left, network, "03 / PLAY TOGETHER", Gold)
-	r.text(left, network+step, "H hosts. Share your invitation privately. J joins automatically.", Bone)
-	r.text(left, network+2*step, "Keep the host running. The game handles the connection automatically.", Muted)
+	r.text(left, network+step, "H hosts. Share the invitation privately. Your friend presses J.", Bone)
+	r.text(left, network+2*step, "Copy or paste the invitation to connect. Keep the host running.", Muted)
 	r.pageFooter(sd, hover)
 	return r.frame()
 }

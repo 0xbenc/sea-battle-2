@@ -35,7 +35,11 @@ func PlacementControls(sd bool) []MenuControl {
 	for i, item := range []struct{ key, label string }{{"x", "X Rotate"}, {"backspace", "Del Remove"}, {"r", "R Shuffle"}, {"u", "U Undo"}} {
 		controls = append(controls, MenuControl{Key: item.key, Label: item.label, X: l.Side + (i%2)*(l.Width/2), Y: row + (i/2)*2, W: l.Width/2 - 1, H: 1})
 	}
-	controls = append(controls, MenuControl{Key: "space", Label: "SPACE Launch", X: l.Side, Y: row + 4, W: l.Width, H: 1})
+	launchHeight := 3
+	if sd {
+		launchHeight = 1
+	}
+	controls = append(controls, MenuControl{Key: "space", Label: "SPACE Launch", X: l.Side, Y: row + 4, W: l.Width, H: launchHeight})
 	controls = append(controls, MenuControl{Key: "?", Label: "? Help", X: 4, Y: l.Footer, W: 10, H: 1}, MenuControl{Key: "esc", Label: "ESC Menu", X: 18, Y: l.Footer, W: 12, H: 1}, MenuControl{Key: "q", Label: "Q Quit", X: 34, Y: l.Footer, W: 10, H: 1})
 	return controls
 }
@@ -99,6 +103,9 @@ func renderPlacement(b BattlePresentation) *Frame {
 	}
 	r := New(w, h)
 	r.ocean(b.T, 0, true)
+	for i, c := range r.Pixels {
+		r.Pixels[i] = mix(c, Ink, .87)
+	}
 	l := PlacementGeometry(b.SD)
 	accent, tint := Gold, RGB(0x1c3543)
 	if b.State.Player == 1 {
@@ -112,7 +119,16 @@ func renderPlacement(b BattlePresentation) *Frame {
 	active := b.Selected >= 0 && b.Selected < 5 && !locked && !b.Pending
 	draft := game.Placement{Coord: b.Cursor, Horizontal: b.Horizontal}
 	legal := active && game.CanPlace(fleet, b.Selected, draft)
-	r.text(4, 0, "DEPLOY YOUR FLEET", Bone)
+	r.rect(0, 0, w, 4, Panel)
+	title := "DEPLOY YOUR FLEET"
+	if locked {
+		title = "YOUR FLEET IS READY"
+	}
+	if b.Pending {
+		title = "CONFIRMING YOUR FLEET"
+	}
+	r.text(4, 0, title, Bone)
+	r.text(w-18, 0, "01 / DEPLOYMENT", Muted)
 	team := "A / UNITED STATES NAVY"
 	if b.State.Player == 1 {
 		team = "B / THE BROOD"
@@ -121,33 +137,43 @@ func renderPlacement(b BattlePresentation) *Frame {
 		team += " / SOLO " + strings.ToUpper(b.Difficulty)
 	}
 	r.text(4, 1, team, accent)
-	r.text(l.X, l.Y/2-2, "YOUR WATERS", Muted)
+	r.text(l.X, l.Y/2-2, "YOUR WATERS", accent)
+	if !b.SD {
+		r.text(l.X+25, l.Y/2-2, "TACTICAL PLACEMENT CHART", Muted)
+	}
+	r.rect(l.X-1, l.Y-1, 10*l.CW+3, 10*l.CH+3, 0x29404a)
 	for row := 0; row < 10; row++ {
 		for col := 0; col < 10; col++ {
-			bg := RGB(0x18323e)
+			bg := RGB(0x102630)
 			if (row+col)%2 == 1 {
-				bg = 0x203e49
+				bg = 0x142d36
 			}
 			if b.State.Player == 1 {
 				bg = mix(bg, tint, .3)
 			}
 			if active && (row == b.Cursor.Y || col == b.Cursor.X) {
-				bg = mix(bg, accent, .09)
+				bg = mix(bg, accent, .13)
 			}
 			r.rect(l.X+col*l.CW, l.Y+row*l.CH, l.CW, l.CH, bg)
 		}
 	}
 	for i := 0; i <= 10; i++ {
-		r.line(l.X+i*l.CW, l.Y, l.X+i*l.CW, l.Y+10*l.CH, 0x45616a)
-		r.line(l.X, l.Y+i*l.CH, l.X+10*l.CW, l.Y+i*l.CH, 0x45616a)
+		r.line(l.X+i*l.CW, l.Y, l.X+i*l.CW, l.Y+10*l.CH, 0x1b343e)
+		r.line(l.X, l.Y+i*l.CH, l.X+10*l.CW, l.Y+i*l.CH, 0x1b343e)
+	}
+	// Four restrained corner marks frame the chart without competing with hulls.
+	for _, corner := range [][4]int{{l.X - 1, l.Y - 1, 1, 1}, {l.X + 10*l.CW + 1, l.Y - 1, -1, 1}, {l.X - 1, l.Y + 10*l.CH + 1, 1, -1}, {l.X + 10*l.CW + 1, l.Y + 10*l.CH + 1, -1, -1}} {
+		x, y, dx, dy := corner[0], corner[1], corner[2], corner[3]
+		r.line(x, y, x+dx*3, y, mix(accent, Ink, .4))
+		r.line(x, y, x, y+dy*2, mix(accent, Ink, .4))
 	}
 	for i := 0; i < 10; i++ {
-		fg, bg := Bone, Ink
+		fg, bg := Muted, Ink
 		if active && b.Cursor.X == i {
 			fg, bg = Ink, accent
 		}
 		r.solidText(l.X+i*l.CW+l.CW/2, l.Y/2-1, string(rune('A'+i)), fg, bg)
-		fg, bg = Bone, Ink
+		fg, bg = Muted, Ink
 		if active && b.Cursor.Y == i {
 			fg, bg = Ink, accent
 		}
@@ -184,28 +210,59 @@ func renderPlacement(b BattlePresentation) *Frame {
 			count++
 		}
 	}
-	r.factionPanel(MenuControl{X: l.Side - 1, Y: l.Top - 2, W: l.Width + 2, H: 5*l.Step + 2}, tint, .75)
 	r.text(l.Side, l.Top-2, fmt.Sprintf("FLEET  %d / 5", count), accent)
+	for i := 0; i < 5; i++ {
+		c := RGB(0x29404a)
+		if i < count {
+			c = accent
+		}
+		r.rect(l.Side+l.Width-15+i*3, (l.Top-2)*2+1, 2, 1, c)
+	}
 	controls := PlacementControls(b.SD)
 	for i, c := range controls[:5] {
 		chosen := active && b.Selected == i
+		placed := len(fleet) > i && fleet[i].Valid()
+		base := Panel
 		if chosen {
-			r.factionPanel(MenuControl{X: c.X, Y: c.Y, W: c.W, H: 2}, 0xffffff, .1)
+			base = mix(Panel, accent, .13)
 		}
-		if b.Hover == c.Key && !locked {
-			r.factionPanel(MenuControl{X: c.X, Y: c.Y, W: c.W, H: 2}, 0xffffff, .06)
+		r.factionPanel(c, base, .96)
+		if b.Hover == c.Key && !locked && !b.Pending {
+			r.factionPanel(c, 0xffffff, .07)
 		}
-		col := Muted
+		stripe := RGB(0x29404a)
+		if placed {
+			stripe = mix(accent, Ink, .35)
+		}
 		if chosen {
-			col = Bone
+			stripe = accent
 		}
-		r.text(c.X, c.Y, fmt.Sprintf("%d %s", i+1, assets.Names[b.State.Player*5+i]), col)
-		pips := strings.Repeat("■", game.Lengths[i])
-		status := ""
-		if len(fleet) > i && fleet[i].Valid() {
-			status = "  SET"
+		r.rect(c.X, c.Y*2, 1, c.H*2, stripe)
+		col := Bone
+		if locked {
+			col = Muted
 		}
-		r.text(c.X+2, c.Y+1, pips+status, accent)
+		r.text(c.X+2, c.Y, fmt.Sprintf("%d", i+1), accent)
+		r.text(c.X+4, c.Y, assets.Names[b.State.Player*5+i], col)
+		pips := strings.Repeat("▪", game.Lengths[i])
+		r.text(c.X+4, c.Y+1, pips, accent)
+		status, statusColor := "UNPLACED", Muted
+		if placed {
+			status, statusColor = "SET", accent
+		}
+		if locked {
+			status, statusColor = "READY", Green
+		}
+		if chosen {
+			status, statusColor = "PLACING", Cyan
+			if !legal {
+				status, statusColor = "BLOCKED", Rust
+			}
+		}
+		r.text(c.X+c.W-len(status)-2, c.Y+1, status, statusColor)
+		if !b.SD {
+			r.text(c.X+4, c.Y+2, assets.Classes[b.State.Player*5+i], Muted)
+		}
 	}
 	complete := PlacementComplete(fleet) && !PlacementDirty(b)
 	for _, c := range controls[5:] {
@@ -229,8 +286,13 @@ func renderPlacement(b BattlePresentation) *Frame {
 		if enabled {
 			col = Bone
 		}
-		if c.Key == "space" && enabled {
-			r.factionPanel(c, accent, .18)
+		if c.Key == "space" {
+			r.factionPanel(c, Panel, .95)
+			if enabled {
+				r.factionPanel(c, accent, .25)
+			}
+		} else if c.Y < l.Footer {
+			r.factionPanel(c, Panel, .7)
 		}
 		if b.Hover == c.Key && enabled {
 			r.factionPanel(c, 0xffffff, .1)
@@ -238,11 +300,18 @@ func renderPlacement(b BattlePresentation) *Frame {
 		label := c.Label
 		if c.Key == "space" && locked {
 			label = "FLEET LOCKED"
+			col = Green
+			r.factionPanel(c, Green, .10)
 		}
 		if c.Key == "space" && b.Pending {
-			label = "LAUNCHING..."
+			label = "CONFIRMING…"
 		}
-		r.text(c.X, c.Y, label, col)
+		x, y := c.X, c.Y
+		if c.Key == "space" {
+			x += (c.W - len(label)) / 2
+			y += (c.H - 1) / 2
+		}
+		r.text(x, y, label, col)
 	}
 	coach := "Place five ships, then launch."
 	if active {
@@ -260,29 +329,45 @@ func renderPlacement(b BattlePresentation) *Frame {
 		coach = "Fleet ready. Click a ship to adjust it, or launch."
 	}
 	if locked {
-		coach = "Fleet locked. Waiting for the other commander."
+		coach = "Fleet ready. Waiting for your opponent."
+		if !b.State.Connected[1-b.State.Player] {
+			coach = "Fleet ready. Waiting for your opponent to connect."
+		}
 	}
 	if b.Pending {
-		coach = "Launching fleet..."
+		coach = "Confirming your fleet…"
 	}
 	if !b.State.Connected[b.State.Player] {
-		coach = "Waiting for connection. You can keep arranging your fleet."
+		coach = "Reconnecting. You can keep arranging your fleet."
+		if locked {
+			coach = "Fleet saved. Reconnecting…"
+		}
 	}
 	if b.Notice != "" && !b.Pending && !locked {
 		coach = b.Notice
 	}
-	r.plaque(2, l.Coach, w-4, 1, Ink)
-	r.text(4, l.Coach, short(coach, w-8), Bone)
-	if b.PlacementHelp {
-		r.Texts = nil
-		lines := []string{"PLACEMENT CONTROLS", "", "Mouse / arrows / WASD   Move the preview", "Click / Enter           Place the selected ship", "Wheel / right click / X Rotate", "1-5 / Tab               Select a ship", "Delete                  Remove selected ship", "R shuffle    U undo    Space launch", "", "Ships may touch, but cannot overlap.", "Click a placed ship to move it.", "", "Click / ? / Esc close"}
-		width := min(68, w-8)
-		left := (w - width) / 2
-		top := (h - len(lines) - 2) / 2
-		r.plaque(left, top, width, len(lines)+2, Ink)
-		for i, line := range lines {
-			r.text(left+2, top+1+i, line, Bone)
+	if !b.SD {
+		hint := "WHEEL / X  Rotate     CLICK / ENTER  Place"
+		if locked {
+			hint = "Battle starts when both fleets are ready."
 		}
+		if b.Pending {
+			hint = "Your ship positions are being confirmed."
+		}
+		r.text(l.X, 39, hint, Muted)
+	}
+	r.rect(2, l.Coach*2, w-4, 2, Panel)
+	r.rect(2, l.Coach*2, 1, 2, accent)
+	r.text(4, l.Coach, short(coach, w-8), Bone)
+	r.line(4, (l.Footer-1)*2, w-5, (l.Footer-1)*2, 0x29404a)
+	const brand = "by TTY.games"
+	r.text(w-4-len(brand), l.Footer, brand, Muted)
+	if b.PlacementHelp {
+		for i, c := range r.Pixels {
+			r.Pixels[i] = mix(c, Ink, .7)
+		}
+		r.Texts = nil
+		r.placementGuide(b.SD, accent)
 	}
 	return r.frame()
 }

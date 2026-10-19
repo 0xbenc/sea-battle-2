@@ -21,8 +21,9 @@ Place ships with **arrows/WASD**, **1–5** selects a hull, **X** rotates, and
 Once both commanders are ready, hover or use **arrows/WASD** to aim on the large
 hostile chart; **click/Enter** fires. **Tab** or clicking the small chart switches
 between targeting and inspecting your fleet without firing. Click a fleet name
-to inspect that ship. Highlighted axes track your aim; foam ripples mark misses,
-bright flames mark hits, and submerged metal marks sunk hull cells. The fleet rack shows surviving hull cells,
+to inspect that ship. Highlighted axes track your aim. Teal numbered cells show your ships and match
+the fleet list; blue dots mark misses, orange Xs mark hits, and gray #s mark sunk cells.
+The fleet list shows surviving hull cells,
 and each chart labels its latest shot. **?** opens the compact combat help panel.
 One shot per
 turn, including hits; the first to destroy all seventeen enemy squares wins.
@@ -216,3 +217,7 @@ All three play fairly, and shot playback reveals board changes in sequence.
 **R** after the result starts a rematch with the opening turn alternated.
 **Esc** returns to the menu; unfinished matches ask before discarding progress.
 See [single-player design and validation](design/SINGLE_PLAYER.md).
+
+For visual review of all eight victory/defeat outcomes, run `make preview-results`.
+Use 1–8 or arrow keys to switch scenes, Tab for charts, R for rematch waiting,
+Space to pause, D for compact size, and Q to exit. No match or network is started.

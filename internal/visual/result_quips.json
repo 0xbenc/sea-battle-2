@@ -1,0 +1,14 @@
+{
+  "united_states_navy": {
+    "close_victory": "Victory! Repairs are covered by the taxpayers.",
+    "overwhelming_victory": "The bugs got squashed.",
+    "narrow_defeat": "It looked like we had a chance",
+    "overwhelming_defeat": "We never stood a chance"
+  },
+  "the_brood": {
+    "close_victory": "Humans turned out to be a formidable foe.",
+    "overwhelming_victory": "The Martians put up more of a fight.",
+    "narrow_defeat": "The American military protected Earth, this time.",
+    "overwhelming_defeat": "There's a new dominant species on this planet."
+  }
+}

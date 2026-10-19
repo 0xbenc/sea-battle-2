@@ -88,7 +88,7 @@ def main():
             check('BATTLE' in b.read(1),'Same invitation reconnects to existing match')
             check('B1 /' in b.read(),'Reconnect restores shot history')
             a.read(.3);a.key('q')
-            check('Closing the host ends' in a.read(),'Host quit confirmation explains session lifetime')
+            check('This ends the session for both players.' in a.read(),'Host quit confirmation explains session lifetime')
             a.key('n');a.stop();b.stop()
             checks.append('Both terminals restore terminal attributes')
         finally:

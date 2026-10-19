@@ -29,7 +29,7 @@ def main():
                     assert 'intact' in text
                     assert 'SHOT 001' in t.key('\r')
                     t.key('?')
-                    assert 'FIRE CONTROL' in t.read()
+                    assert 'TAKE YOUR SHOT' in t.read()
                     assert 'SHOT 001' in click(t, 15, 8)
                     # Aim B4, then fire exactly once on mouse press/release.
                     x, y = (24, 17) if hd else (11, 9)

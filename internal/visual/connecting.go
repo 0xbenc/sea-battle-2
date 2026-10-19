@@ -36,11 +36,15 @@ func RenderConnecting(sd bool, t, progressTime float64, idle MenuIdle, status, n
 	if status == "" {
 		status = "Establishing a secure connection…"
 	}
-	r.text(left+2, 9*scale, short(status, width-14), Bone)
+	lines := wrapMessage(status, width-14)
+	row := 8*scale + (3*scale-len(lines))/2
+	for i, line := range lines {
+		r.text(left+2, row+i, line, Bone)
+	}
 	r.loadingDots(left+width-8, 9*scale, progressTime)
-	r.text(left+2, 13*scale, "Keep your friend's game running. We'll take it from here.", Muted)
+	r.text(left+2, 13*scale, "Keep your friend's game running while you connect.", Muted)
 	if notice != "" {
-		r.text(left, 18*scale, short(notice, width), Cyan)
+		r.noticeBox(left, 18*scale, width, notice, Rust)
 	}
 	r.controlFooter(ConnectingControls(sd), hover)
 	return r.frame()

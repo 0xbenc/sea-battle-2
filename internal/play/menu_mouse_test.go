@@ -179,3 +179,35 @@ func TestConnectingCancelClick(t *testing.T) {
 		close()
 	}
 }
+
+func TestLeaveButtons(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {160, 48}, {184, 57}} {
+		m, close := New(Options{})
+		m.width, m.height = size[0], size[1]
+		m.mode, m.running, m.quitting, m.returnMenu = "game", true, true, true
+		w, h := 160, 48
+		if m.sd() {
+			w, h = 80, 24
+		}
+		for i := 0; i < 2; i++ {
+			m.quitting, m.returnMenu = true, true
+			c := visual.LeaveControls(m.sd())[i]
+			mouse := tea.Mouse{X: c.X + (m.width-w)/2, Y: c.Y + (m.height-h)/2, Button: tea.MouseLeft}
+			m = apply(m, tea.MouseMotionMsg(mouse))
+			if m.menuHover != c.Key || m.View().MouseMode != tea.MouseModeAllMotion {
+				t.Fatal("leave hover missing")
+			}
+			m = apply(m, tea.MouseClickMsg(mouse))
+			if m.quitting {
+				t.Fatal("button did not close confirmation")
+			}
+			if i == 0 && m.mode != "game" {
+				t.Fatal("Stay left the game")
+			}
+			if i == 1 && m.mode != "menu" {
+				t.Fatal("Leave did not return to menu")
+			}
+		}
+		close()
+	}
+}

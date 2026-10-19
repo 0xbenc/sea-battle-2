@@ -22,3 +22,7 @@ test-terminal: build
 	uv run --with pillow --with pyte tools/solo_pty_review.py
 	uv run --with pillow --with pyte tools/play_pty_review.py
 	uv run --with pillow --with pyte tools/pty_review.py
+
+.PHONY: preview-results
+preview-results: build
+	./bin/sea-battle --preview-results

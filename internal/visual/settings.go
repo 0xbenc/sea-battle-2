@@ -1,5 +1,7 @@
 package visual
 
+import "strings"
+
 func SettingsControls(sd bool) []MenuControl {
 	left, width, scale := 16, 128, 2
 	if sd {
@@ -8,7 +10,7 @@ func SettingsControls(sd bool) []MenuControl {
 	controls := []MenuControl{
 		{Key: "d", X: left, Y: 5 * scale, W: width, H: 2 * scale},
 		{Key: "m", X: left, Y: 8 * scale, W: width, H: 2 * scale},
-		{Key: "c", X: left, Y: 17 * scale, W: width, H: 2 * scale},
+		{Key: "c", X: left, Y: 16 * scale, W: width, H: 2 * scale},
 	}
 	for i, label := range []string{"1 Easy", "2 Medium", "3 Hard"} {
 		controls = append(controls, MenuControl{Key: string(rune('1' + i)), Label: label, X: left + i*(width/3), Y: 14 * scale, W: width/3 - 2, H: scale})
@@ -87,7 +89,11 @@ func RenderSettings(sd bool, t float64, idle MenuIdle, compact, animated bool, d
 	r.text(c.X+2, c.Y+scale, "The people behind Sea Battle 2", Muted)
 	r.text(c.X+c.W-4, c.Y, ">", Cyan)
 	if notice != "" {
-		r.text(left, 20*scale, short(notice, width), Cyan)
+		color := Cyan
+		if strings.HasPrefix(notice, "Could not") {
+			color = Rust
+		}
+		r.noticeBox(left, 19*scale, width, notice, color)
 	}
 	r.pageFooter(sd, hover)
 	return r.frame()

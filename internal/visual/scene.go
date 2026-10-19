@@ -87,11 +87,19 @@ func (r *Raster) chrome(st State, s Scene) {
 	r.text(10, h-2, line, Bone)
 }
 func short(s string, n int) string {
-	if len(s) <= n {
+	runes := []rune(s)
+	if len(runes) <= n {
 		return s
 	}
-	return s[:max(0, n-3)] + "..."
+	if n <= 0 {
+		return ""
+	}
+	if n <= 3 {
+		return string(runes[:n])
+	}
+	return string(runes[:n-3]) + "..."
 }
+
 func (r *Raster) cinema(st State, s Scene, weather int, camera string) {
 	r.cinemaScene(st, s, weather, camera, true)
 }

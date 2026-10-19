@@ -83,8 +83,9 @@ func RenderBattle(b BattlePresentation) *Frame {
 		width := min(w-12, 90)
 		left, top := (w-width)/2, h/2-3
 		r.factionPanel(MenuControl{X: left, Y: top, W: width, H: 6}, Ink, .85)
-		r.center(top+1, "ENEMY TAKING AIM", Rust)
-		r.center(top+3, "INCOMING FIRE", Bone)
+		r.center(top+1, "INCOMING FIRE", Rust)
+		r.center(top+3, "Your opponent has fired.", Bone)
+		r.loadingDots(w/2-2, top+4, b.T)
 		r.combatHeader(b, "ENEMY TURN", Rust)
 	} else {
 		r = New(w, h)
@@ -95,69 +96,6 @@ func RenderBattle(b BattlePresentation) *Frame {
 
 	}
 	return r.frame()
-}
-func (r *Raster) battleClip(b BattlePresentation, st State) {
-	e := *b.Clip
-	st.T = b.ClipTime
-	st.TargetX, st.TargetY = e.At.X, e.At.Y
-	// Only a known hull may appear. An ordinary enemy hit is an impact at sea,
-	// never a cinematic that accidentally identifies the hidden ship.
-	if e.Ship >= 0 {
-		s := Scene{Kind: Hit, Ship: (1-e.Player)*5 + e.Ship, Team: e.Player, Duration: 9}
-		if e.Sunk {
-			s.Kind = Sink
-			s.Duration = 13
-			st.T *= 2
-		}
-		r.cinemaScene(st, s, 0, "SIDE", false)
-	} else {
-		r.ocean(st.T, 0, false)
-		if e.Hit {
-			r.explosion(r.W/2, r.H/2, st.T, e.Player == 1, 1)
-		} else {
-			r.splash(r.W/2, r.H/2, st.T, 1)
-		}
-	}
-	word, color := "YOU MISSED!", Cyan
-	if e.Player != b.State.Player {
-		word = "THEY MISSED!"
-	}
-	if e.Hit {
-		word, color = "YOU HIT!", Gold
-		if e.Player != b.State.Player {
-			word, color = "YOU WERE HIT!", Rust
-		}
-	}
-	if e.Sunk {
-		word, color = "SUNK!", 0xffb466
-	}
-	row := 4
-	if !b.SD {
-		row = 8
-	}
-	// One punchy word; a short white-hot attack settles into the result color.
-	color = mix(color, 0xfff5df, 1-smooth(b.ClipTime/.22))
-	mask := New(r.W, r.H/2)
-	mask.bigWord(word, row, color)
-	for y := 0; y < r.H; y++ {
-		for x := 0; x < r.W; x++ {
-			if mask.Pixels[y*r.W+x] != 0 {
-				r.rect(x-1, y-1, 3, 3, Ink)
-			}
-		}
-	}
-	for i, c := range mask.Pixels {
-		if c != 0 {
-			r.put(i%r.W, i/r.W, c)
-		}
-	}
-	if e.Sunk && e.Ship >= 0 {
-		subrow := row + 4
-		if !b.SD {
-			subrow = row + 7
-		}
-		r.center(subrow, assets.Names[(1-e.Player)*5+e.Ship], Bone)
-	}
 }
 
 // frontOcean is scenery only: no title, cinematic HUD, console or modal.

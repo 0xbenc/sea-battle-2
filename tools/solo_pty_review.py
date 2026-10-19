@@ -20,7 +20,7 @@ def main():
                     if hd:t.resize(160,48)
                     check('Single player' in t.read(),f'{faction} {hd}: menu entry')
                     t.key('s')
-                    check('CHOOSE COMMAND' in t.read(),'Faction selection')
+                    check('SINGLE PLAYER' in t.read(),'Faction selection')
                     difficulty='hard' if hd else 'easy'
                     t.key('3' if hd else '1')
                     t.key('a' if faction=='american' else 'b')
@@ -37,7 +37,7 @@ def main():
                     check('I invitation' not in text,'Solo controls omit invitation')
                     t.capture(f'solo-{faction}-{"hd" if hd else "sd"}.png')
                     t.key('\x1b');t.read(.2)
-                    check('LEAVE COMMAND?' in t.read(),'Leaving unfinished game confirms')
+                    check('LEAVE THIS BATTLE?' in t.read(),'Leaving unfinished game confirms')
                     t.key('n')
                     check('BATTLE' in t.read(),'Cancel leave preserves battle')
                     t.key('\x1b');t.read(.2);t.key('y')

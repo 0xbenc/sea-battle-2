@@ -166,3 +166,40 @@ func TestCombatBoardCoordinates(t *testing.T) {
 		}
 	}
 }
+
+func TestOwnChartTilesKeepShipsAndDamageDistinct(t *testing.T) {
+	for _, sd := range []bool{true, false} {
+		for _, inspect := range []bool{true, false} {
+			b := combatFixture(0, sd)
+			b.InspectOwn = inspect
+			b.State.Own = game.EmptyFleet()
+			b.State.Own[4] = game.Placement{Coord: game.Coord{X: 0, Y: 0}, Horizontal: true}
+			b.State.Incoming = [100]game.Mark{}
+			b.State.Incoming[1] = game.Hit
+			b.State.Incoming[2] = game.Sunk
+			b.State.Incoming[5] = game.Miss
+			_, g := CombatBoards(sd, inspect)
+			r := New(160, 48)
+			r.combatBoard(b, g, true, inspect)
+			for _, check := range []struct {
+				x      int
+				color  RGB
+				symbol string
+			}{{0, chartShip, "5"}, {1, chartHit, "X"}, {2, chartSunk, "#"}, {5, chartMiss, "·"}} {
+				x, y := g.X+check.x*g.CW+g.CW-1, g.Y+g.CH-1
+				if r.Pixels[y*r.W+x] != check.color {
+					t.Fatalf("wrong tile color at %d SD=%v inspect=%v", check.x, sd, inspect)
+				}
+				found := false
+				for _, label := range r.Texts {
+					if label.x >= g.X+check.x*g.CW && label.x < g.X+(check.x+1)*g.CW && label.y >= g.Y/2 && label.y < (g.Y+g.CH+1)/2 && label.s == check.symbol {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("missing %q mark SD=%v inspect=%v", check.symbol, sd, inspect)
+				}
+			}
+		}
+	}
+}

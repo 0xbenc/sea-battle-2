@@ -181,7 +181,7 @@ func TestServerRejectionSurvivesStateResync(t *testing.T) {
 	m.pending = true
 	m = apply(m, peer.Message{Type: "error", Error: "wait for your turn"})
 	m = apply(m, peer.Message{Type: "state", View: &v})
-	if m.notice != "wait for your turn" {
+	if m.notice != "It's your opponent's turn." {
 		t.Fatal("resync erased rejection")
 	}
 }
@@ -305,15 +305,15 @@ func TestMissTimingAndEnemyHandoff(t *testing.T) {
 		m.last = start
 		m.clipTime = 1.95
 		m = apply(m, clockTick(start.Add(100*time.Millisecond)))
-		if len(m.clips) != 1 || !m.handoff() || m.clipDuration() != 4 {
+		if len(m.clips) != 1 || !m.handoff() || m.clipDuration() != 2+handoffDuration {
 			t.Fatal("missing enemy handoff")
 		}
 		m.clips[0].Hit = true
-		if m.clipDuration() != 5.5 {
+		if m.clipDuration() != 3.5+handoffDuration {
 			t.Fatal("hit timing changed")
 		}
 		m.clips[0].Sunk = true
-		if m.clipDuration() != 8 {
+		if m.clipDuration() != 6+handoffDuration {
 			t.Fatal("sink timing changed")
 		}
 		cleanup()
