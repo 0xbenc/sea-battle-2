@@ -122,3 +122,10 @@ connection credentials; never include them in release archives.
   packages. Native Windows Go tests/vet and the Windows Play.cmd version smoke
   test also passed locally after making Unix file-mode assertions platform-aware.
 - No stable tag or public itch/tap release has been created by this setup.
+
+## First stable release approval
+
+The owner tested the installed Linux/WSL and native Windows packages and reported
+“they run great!”, then approved publication to itch and Homebrew. The first
+stable version is **1.0.0**. TTY.games integration remains deferred. The earlier
+no-public-release statements above describe the setup checkpoint.
