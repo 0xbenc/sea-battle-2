@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,7 +39,9 @@ type Config struct {
 	Human           int
 	Host            bool
 	Join, Advertise string
+	JoinAddress     string
 	Port            int
+	WebSocketPort   int
 	NoMap           bool
 }
 type Event struct {
@@ -247,6 +250,10 @@ func (c *Controller) run(op *operation, config Config) {
 		c.runLocal(op, config.Human, config.Difficulty.Default())
 		return
 	}
+	if config.WebSocketPort < 0 || config.WebSocketPort > 65535 || config.WebSocketPort != 0 && !config.Host {
+		fail(errors.New("websocket port requires a host and must be 1-65535"))
+		return
+	}
 	if config.Port < 0 || config.Port > 65535 {
 		fail(errors.New("port must be 0-65535"))
 		return
@@ -273,6 +280,17 @@ func (c *Controller) run(op *operation, config Config) {
 		}
 		defer server.Close()
 		setup.Port = server.Port()
+		if config.WebSocketPort != 0 {
+			l, listenErr := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(config.WebSocketPort)))
+			if listenErr != nil {
+				fail(listenErr)
+				return
+			}
+			httpServer := &http.Server{Handler: server.WebSocketHandler(), ReadHeaderTimeout: 5 * time.Second}
+			done := make(chan struct{})
+			go func() { defer close(done); httpServer.Serve(l) }()
+			defer func() { httpServer.Close(); <-done }()
+		}
 		public, e := server.UpdateAddresses(routes(c.deps.addresses(server.Port()), config.Advertise, ""))
 		if e != nil {
 			fail(e)
@@ -291,7 +309,16 @@ func (c *Controller) run(op *operation, config Config) {
 			return
 		}
 	}
-	client, err := c.deps.connect(op.ctx, invite)
+	var client *peer.Client
+	if config.JoinAddress != "" {
+		if config.Host {
+			fail(errors.New("connect address is only for joining"))
+			return
+		}
+		client, err = peer.ConnectVia(op.ctx, invite, config.JoinAddress)
+	} else {
+		client, err = c.deps.connect(op.ctx, invite)
+	}
 	if err != nil {
 		fail(err)
 		return
@@ -380,7 +407,7 @@ func (c *Controller) manageRoutes(op *operation, ctx context.Context, server *pe
 			})
 		}()
 	} else {
-		u := netsetup.Update{State: "unavailable", Notice: "Router mapping disabled. LAN/IPv6/manual routes only."}
+		u := netsetup.Update{State: "unavailable", Notice: "Router mapping disabled. Using the invitation routes."}
 		c.publish(op, Event{Router: &u})
 	}
 	defer wg.Wait()

@@ -26,7 +26,9 @@ type Options struct {
 	Solo            string
 	Host            bool
 	Join, Advertise string
+	JoinAddress     string
 	Port            int
+	WebSocketPort   int
 	NoMap, SD       bool
 }
 type clockTick time.Time
@@ -121,11 +123,11 @@ func (m Model) startSolo(human int) tea.Cmd {
 	return nil
 }
 func (m Model) startHost() tea.Cmd {
-	m.session.Start(session.Config{Host: true, Port: m.opts.Port, Advertise: m.opts.Advertise, NoMap: m.opts.NoMap})
+	m.session.Start(session.Config{Host: true, Port: m.opts.Port, WebSocketPort: m.opts.WebSocketPort, Advertise: m.opts.Advertise, NoMap: m.opts.NoMap})
 	return nil
 }
 func (m Model) startJoin(code string) tea.Cmd {
-	m.session.Start(session.Config{Join: code})
+	m.session.Start(session.Config{Join: code, JoinAddress: m.opts.JoinAddress})
 	return nil
 }
 func (m Model) event() tea.Cmd {
@@ -763,9 +765,9 @@ func (m Model) View() tea.View {
 			"C copy invitation    S save invitation.txt    ENTER deploy", "", m.routerStatus, "",
 			fmt.Sprintf("Private invitation: %d characters", len(m.invite)), m.invite[:min(50, len(m.invite))] + "...", "Use C or S for the COMPLETE invitation.", "", "TCP " + strconv.Itoa(m.port) + " / host must remain running",
 			"Manual: --host --advertise PUBLIC_IP:PORT (forward TCP).",
-			"If upstream NAT blocks both hosts, use reachable IPv6 or LAN.", "", m.notice})
+			"Different networks: try Tailscale or the public-host launcher.", "", m.notice})
 	case m.state == nil:
-		f = m.front("ESTABLISHING COMMAND", []string{"Connecting directly to the host...", "", "No relay fallback is used.", "If this persists: check the host is still running, allow its TCP", "port through the firewall, or try the other player hosting.", "For upstream NAT/CGNAT: use reachable IPv6 or the same LAN.", "", "ESC back    Q quit", m.notice})
+		f = m.front("ESTABLISHING COMMAND", []string{"Trying the invitation routes securely...", "", "Check that the host is still running and the invitation is current.", "For different networks, try a shared VPN such as Tailscale.", "Public alternative: host runs python3 tools/host-public.py", "Then share its new invitation. No guest account is needed.", "", "ESC back    Q quit", m.notice})
 	default:
 		f = visual.RenderBattle(m.battlePresentation())
 	}

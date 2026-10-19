@@ -40,7 +40,7 @@ func maintain(ctx context.Context, discover func(context.Context) (*Mapping, err
 			// Even a mapping returned concurrently with cancellation must be released.
 			m.run(ctx, report)
 		} else if ctx.Err() == nil {
-			report(Update{State: "unavailable", Notice: "No router mapping available. Retrying; LAN/IPv6/manual routes remain available."})
+			report(Update{State: "unavailable", Notice: "No router mapping available. Retrying; LAN/VPN/IPv6/manual routes remain available. " + err.Error()})
 		}
 		if !wait(ctx, retry) {
 			return

@@ -30,6 +30,7 @@ type Command struct {
 type Message struct {
 	Invitation *Invitation `json:"invitation,omitempty"`
 	Type       string      `json:"type"`
+	Route      string      `json:"-"`
 	View       *game.View  `json:"view,omitempty"`
 	Error      string      `json:"error,omitempty"`
 }
@@ -40,6 +41,7 @@ type subscriber struct {
 }
 type Server struct {
 	listener          net.Listener
+	tlsConfig         *tls.Config
 	mu                sync.Mutex
 	game              *game.Game
 	peers             [2]*subscriber
@@ -67,13 +69,14 @@ func Host(address string) (*Server, error) {
 	if e != nil {
 		return nil, e
 	}
-	l, e := tls.Listen("tcp", address, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13})
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}
+	l, e := tls.Listen("tcp", address, tlsConfig)
 	if e != nil {
 		return nil, e
 	}
 	var coin [1]byte
 	rand.Read(coin[:])
-	s := &Server{listener: l, game: game.New(int(coin[0] % 2)), hostKey: hk, guestKey: gk, fingerprint: fp, expires: time.Now().Add(24 * time.Hour).Unix(), done: make(chan struct{}), admission: make(chan struct{}, 16), connections: make(map[net.Conn]struct{})}
+	s := &Server{listener: l, tlsConfig: tlsConfig, game: game.New(int(coin[0] % 2)), hostKey: hk, guestKey: gk, fingerprint: fp, expires: time.Now().Add(24 * time.Hour).Unix(), done: make(chan struct{}), admission: make(chan struct{}, 16), connections: make(map[net.Conn]struct{})}
 	s.wg.Add(1)
 	go s.accept()
 	return s, nil

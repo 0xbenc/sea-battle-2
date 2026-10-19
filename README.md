@@ -46,13 +46,21 @@ Direct launch options:
 ./bin/sea-battle --lookdev            # original 40-scene art showcase
 ```
 
+
+For players on different networks without a shared VPN, the host can run
+`python3 tools/host-public.py` for an optional public tunnel, then share the
+normal full invitation. Only the host needs `cloudflared`; no Cloudflare account
+is used. The guest uses the usual Join menu. See [setup, privacy, limitations,
+and verified results](design/NETWORK_FIELD_TEST.md).
+
 The default host port is **TCP 4747**; `--port 0` chooses an available port.
 `--advertise` adds a reachable endpoint to the invitation; it does not configure
 a firewall or forward a port. With manual IPv4 setup, forward that external TCP
 port to the host's listening port and permit it through the host firewall.
 Global IPv6 still needs inbound firewall permission. A private router address or
 CGNAT may require upstream configuration, switching hosts, reachable IPv6, or
-playing on the same LAN. There is deliberately no relay fallback.
+playing on the same LAN. An optional public WebSocket tunnel is available when direct routes fail; see
+[the cross-network setup and field tests](design/NETWORK_FIELD_TEST.md).
 
 Invitations expire after 24 hours and contain a private bearer key plus the
 host certificate fingerprint. Keep them private. Clients try the supplied
@@ -108,9 +116,10 @@ tests, and three count-bounded fuzz targets. `make test-terminal` runs both PTY
 reviews. See [the hardening record](design/HARDENING.md) for ownership, guarantees,
 failure scenarios, and validation evidence.
 
-Real Internet/router interoperability and native Windows/macOS behavior still
-need field testing; localhost sessions, simulated routers and cross-builds do
-not prove those paths.
+Real WSL2 ↔ macOS matches have passed over Tailscale and an optional public
+WebSocket tunnel in both hosting directions. Router mapping was unavailable on
+these networks; native Windows and other router interoperability remain unproven.
+See [the field test record and launch instructions](design/NETWORK_FIELD_TEST.md).
 
 The two teams use the same fleet lengths, with distinct ship identities. Team A
 is the original American fleet from `0xbenc/SeaBattle`; Team B is an alien naval
@@ -149,8 +158,9 @@ Art presentation follows these additive principles:
   stays classic Battleship.
 
 - **Multiplayer is directly player-hosted:** Host → copy invitation → Join/paste.
-  No accounts, friends system, rendezvous service, relay, or required shared
-  infrastructure. Invitations carry connection details rather than referencing
+  No accounts, friends system, rendezvous service, or required shared
+  infrastructure for direct play. An explicit public-tunnel launcher provides an
+  optional fallback through Cloudflare Quick Tunnels. Invitations carry connection details rather than referencing
   a centrally stored game code.
 - **Minimize network setup, without promising universal connectivity:** automate
   local address discovery and router port mapping where supported; support LAN,
@@ -161,7 +171,8 @@ Art presentation follows these additive principles:
   listening port. Self-contained invitations carry candidate addresses, port,
   protocol version, host certificate fingerprint, and a random session secret;
   no certificate authority is required. Try LAN, global IPv6, and mapped IPv4
-  paths automatically. Attempt temporary PCP, NAT-PMP, and UPnP router mappings,
+  paths automatically, including VPN interfaces. Optional WSS invitation routes
+  carry the same pinned TLS session through a public HTTP tunnel. Attempt temporary PCP, NAT-PMP, and UPnP router mappings,
   renew while hosting, and remove on exit (expiry handles unclean exits).
   Provide manual address/hostname and port overrides. A router mapping is not
   proof of internet reachability: report connection success only after the guest

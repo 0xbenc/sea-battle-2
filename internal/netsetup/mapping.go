@@ -11,6 +11,7 @@ import (
 	"github.com/huin/goupnp"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ func (m *Mapping) Run(ctx context.Context, report func(string)) {
 	})
 }
 func Discover(ctx context.Context, port int) (*Mapping, error) {
+	var failures []string
 	gw, err := gateway.DiscoverGateway()
 	if err == nil && gw.To4() != nil {
 		target := net.JoinHostPort(gw.String(), "5351")
@@ -46,9 +48,18 @@ func Discover(ctx context.Context, port int) (*Mapping, error) {
 			if e == nil {
 				return m, nil
 			}
+			failures = append(failures, fmt.Sprintf("%s: %v", kind, e))
 		}
 	}
-	return upnpMapping(ctx, port)
+	if err != nil {
+		failures = append(failures, fmt.Sprintf("gateway: %v", err))
+	}
+	m, err := upnpMapping(ctx, port)
+	if err == nil {
+		return m, nil
+	}
+	failures = append(failures, fmt.Sprintf("UPnP: %v", err))
+	return nil, errors.New(strings.Join(failures, "; "))
 }
 func exchange(ctx context.Context, target string, request []byte) ([]byte, net.IP, error) {
 	d := net.Dialer{}

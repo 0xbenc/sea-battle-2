@@ -244,6 +244,8 @@ func run() error {
 	joinFile := flag.String("join-file", "", "read an invitation from a file")
 	port := flag.Int("port", 4747, "host TCP port (0 chooses an available port)")
 	advertise := flag.String("advertise", "", "additional reachable host:port for invitations")
+	websocketPort := flag.Int("websocket-port", 0, "optional loopback HTTP port for a public WebSocket tunnel")
+	joinAddress := flag.String("connect-address", "", "additional guest route (host:port); keeps invitation TLS identity")
 	noMap := flag.Bool("no-map", false, "disable automatic router mapping")
 
 	scene := flag.String("scene", "arrival", "scene ID; see --list")
@@ -256,6 +258,12 @@ func run() error {
 	paused := flag.Bool("paused", false, "start paused")
 	tour := flag.Bool("tour", true, "advance through scenes automatically")
 	flag.Parse()
+	if *websocketPort < 0 || *websocketPort > 65535 {
+		return fmt.Errorf("websocket port must be 0-65535")
+	}
+	if *websocketPort != 0 && !*host {
+		return fmt.Errorf("--websocket-port requires --host")
+	}
 	if *port < 0 || *port > 65535 {
 		return fmt.Errorf("port must be 0-65535")
 	}
@@ -278,6 +286,14 @@ func run() error {
 			return err
 		}
 		*join = string(b)
+	}
+	if *joinAddress != "" {
+		if *join == "" {
+			return fmt.Errorf("--connect-address requires --join or --join-file")
+		}
+		if err := peer.ValidAddress(*joinAddress); err != nil {
+			return err
+		}
 	}
 	if !bot.Difficulty(*difficulty).Valid() {
 		return fmt.Errorf("difficulty must be easy, medium or hard")
@@ -310,7 +326,7 @@ func run() error {
 				return err
 			}
 		}
-		opts := play.Options{Solo: *solo, Host: *host, Join: *join, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"}
+		opts := play.Options{Solo: *solo, Host: *host, Join: *join, JoinAddress: *joinAddress, WebSocketPort: *websocketPort, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"}
 		flag.Visit(func(f *flag.Flag) {
 			if f.Name == "difficulty" {
 				opts.Difficulty = bot.Difficulty(*difficulty)

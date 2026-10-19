@@ -1,4 +1,4 @@
-// Package peer implements a direct, pinned-TLS connection with no discovery service.
+// Package peer implements pinned TLS over direct TCP or optional WebSocket tunnels.
 package peer
 
 import (
@@ -101,6 +101,9 @@ func ValidAddress(a string) error {
 	if len(a) > 300 {
 		return errors.New("address too long")
 	}
+	if strings.HasPrefix(a, "wss://") {
+		return validWebSocketAddress(a)
+	}
 	host, port, e := net.SplitHostPort(a)
 	if e != nil || host == "" {
 		return errors.New("address must be host:port (IPv6: [address]:port)")
@@ -186,5 +189,5 @@ func LocalAddresses(port int) []string {
 	return out
 }
 func ConnectionHelp(port int) string {
-	return fmt.Sprintf("Allow inbound TCP %d on the host. If automatic mapping is unavailable, forward TCP %d to this computer and add the router's public address. With upstream NAT/CGNAT, try the other player hosting or reachable IPv6. No relay is used.", port, port)
+	return fmt.Sprintf("Allow inbound TCP %d on the host. On different networks, try a shared VPN such as Tailscale (running inside WSL when hosting there). If automatic mapping is unavailable, forward TCP %d to this computer and add the router's public address. With upstream NAT/CGNAT, try the other player hosting or reachable IPv6. For a public tunnel, host with python3 tools/host-public.py.", port, port)
 }

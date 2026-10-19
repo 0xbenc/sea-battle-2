@@ -3,13 +3,13 @@ package peer
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"sea-battle-2/internal/game"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,6 +20,7 @@ type Client struct {
 	Updates chan Message
 	invite  Invitation
 	resume  string
+	route   string
 	ctx     context.Context
 	cancel  context.CancelFunc
 	mu      sync.Mutex
@@ -31,6 +32,17 @@ type Client struct {
 }
 
 func Connect(ctx context.Context, i Invitation) (*Client, error) {
+	return ConnectVia(ctx, i, "")
+}
+
+// ConnectVia keeps a caller-supplied route across host route updates and reconnects.
+// The invitation still supplies the pinned identity and seat credential.
+func ConnectVia(ctx context.Context, i Invitation, route string) (*Client, error) {
+	if route != "" {
+		if err := ValidAddress(route); err != nil {
+			return nil, err
+		}
+	}
 	if err := i.Validate(); err != nil {
 		return nil, err
 	}
@@ -40,7 +52,7 @@ func Connect(ctx context.Context, i Invitation) (*Client, error) {
 	}
 	i.Addresses = append([]string(nil), i.Addresses...)
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Client{Updates: make(chan Message, 32), invite: i, resume: resume, ctx: ctx, cancel: cancel, done: make(chan struct{}), wake: make(chan struct{}, 1)}
+	c := &Client{Updates: make(chan Message, 32), invite: i, resume: resume, route: route, ctx: ctx, cancel: cancel, done: make(chan struct{}), wake: make(chan struct{}, 1)}
 	go c.run()
 	return c, nil
 }
@@ -98,11 +110,15 @@ func (c *Client) sendOn(conn net.Conn, cmd Command) error {
 }
 func (c *Client) dial() (net.Conn, error) {
 	invite := c.Invitation()
+	if c.route != "" {
+		invite.Addresses = append([]string{c.route}, invite.Addresses...)
+	}
 	ctx, cancel := context.WithTimeout(c.ctx, 6*time.Second)
 	defer cancel()
 	type result struct {
 		conn net.Conn
 		err  error
+		addr string
 	}
 	results := make(chan result)
 	var wg sync.WaitGroup
@@ -110,10 +126,11 @@ func (c *Client) dial() (net.Conn, error) {
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()
-			d := tls.Dialer{NetDialer: &net.Dialer{Timeout: 5 * time.Second}, Config: pinnedConfig(invite.Fingerprint)}
-			conn, err := d.DialContext(ctx, "tcp", addr)
+			attempt, stop := context.WithTimeout(ctx, 5*time.Second)
+			conn, err := dialPinned(attempt, addr, invite.Fingerprint)
+			stop()
 			select {
-			case results <- result{conn, err}:
+			case results <- result{conn: conn, err: err, addr: addr}:
 			case <-ctx.Done():
 				if conn != nil {
 					abortConn(conn)
@@ -123,6 +140,7 @@ func (c *Client) dial() (net.Conn, error) {
 	}
 	// Wait for all dialers on every exit: no orphaned successful connections.
 	defer wg.Wait()
+	failures := make([]string, 0, len(invite.Addresses))
 	for range invite.Addresses {
 		select {
 		case r := <-results:
@@ -130,11 +148,13 @@ func (c *Client) dial() (net.Conn, error) {
 				cancel()
 				return r.conn, nil
 			}
+			failures = append(failures, fmt.Sprintf("%s: %v", r.addr, r.err))
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("connection deadline: %w (%s)", ctx.Err(), strings.Join(failures, "; "))
 		}
 	}
-	return nil, errors.New("no invitation address accepted the pinned TLS connection")
+	slices.Sort(failures)
+	return nil, fmt.Errorf("no invitation address accepted pinned TLS: %s", strings.Join(failures, "; "))
 }
 
 var errRejected = errors.New("host rejected invitation")
@@ -219,6 +239,7 @@ func (c *Client) read(conn net.Conn) error {
 		if m.Type == "state" {
 			c.mu.Lock()
 			c.ready = true
+			m.Route = conn.RemoteAddr().String()
 			c.mu.Unlock()
 			select {
 			case <-c.wake:

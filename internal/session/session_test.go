@@ -269,3 +269,26 @@ func TestDelayedExpiredRouterResultCannotPublishStaleRoute(t *testing.T) {
 		return false
 	})
 }
+
+func TestWebSocketListenerClosesWithSession(t *testing.T) {
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	probe.Close()
+	c := New(context.Background())
+	defer c.Close()
+	c.Start(Config{Host: true, NoMap: true, WebSocketPort: port})
+	e := await(t, c, func(e Event) bool { return e.State == Active || e.State == Failed })
+	if e.State == Failed {
+		t.Fatal(e.Error)
+	}
+	c.Stop()
+	await(t, c, func(e Event) bool { return e.State == Stopped })
+	probe, err = net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		t.Fatal("websocket listener leaked", err)
+	}
+	probe.Close()
+}
