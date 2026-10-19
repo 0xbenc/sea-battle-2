@@ -235,7 +235,11 @@ func saveCapture(s visual.State) error {
 	}
 	return os.WriteFile(filepath.Join("captures", name), b, 0644)
 }
+
+var version = "dev"
+
 func run() error {
+	showVersion := flag.Bool("version", false, "print the release version and exit")
 	previewResults := flag.Bool("preview-results", false, "preview all eight victory/defeat scenes without a match")
 	lookdev := flag.Bool("lookdev", false, "open the scripted art review")
 	difficulty := flag.String("difficulty", "medium", "solo bot: easy, medium or hard")
@@ -260,6 +264,10 @@ func run() error {
 	paused := flag.Bool("paused", false, "start paused")
 	tour := flag.Bool("tour", true, "advance through scenes automatically")
 	flag.Parse()
+	if *showVersion {
+		fmt.Printf("sea-battle %s\n", version)
+		return nil
+	}
 	if *websocketPort < 0 || *websocketPort > 65535 {
 		return fmt.Errorf("websocket port must be 0-65535")
 	}

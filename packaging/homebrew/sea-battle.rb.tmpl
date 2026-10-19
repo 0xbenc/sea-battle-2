@@ -1,0 +1,36 @@
+class SeaBattle < Formula
+  desc "Naval battles in your terminal, solo or with a friend"
+  homepage "https://github.com/0xbenc/sea-battle-2"
+  version "{{VERSION}}"
+  license "MIT"
+
+  on_macos do
+    depends_on macos: :monterey
+    if Hardware::CPU.arm?
+      url "https://github.com/0xbenc/sea-battle-2/releases/download/v{{VERSION}}/sea-battle_{{VERSION}}_darwin_arm64.tar.gz"
+      sha256 "{{SHA_DARWIN_ARM64}}"
+    else
+      url "https://github.com/0xbenc/sea-battle-2/releases/download/v{{VERSION}}/sea-battle_{{VERSION}}_darwin_amd64.tar.gz"
+      sha256 "{{SHA_DARWIN_AMD64}}"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "https://github.com/0xbenc/sea-battle-2/releases/download/v{{VERSION}}/sea-battle_{{VERSION}}_linux_arm64.tar.gz"
+      sha256 "{{SHA_LINUX_ARM64}}"
+    else
+      url "https://github.com/0xbenc/sea-battle-2/releases/download/v{{VERSION}}/sea-battle_{{VERSION}}_linux_amd64.tar.gz"
+      sha256 "{{SHA_LINUX_AMD64}}"
+    end
+  end
+
+  def install
+    bin.install "sea-battle"
+  end
+
+  test do
+    assert_equal "sea-battle #{version}", shell_output("#{bin}/sea-battle --version").strip
+    assert_match "arrival", shell_output("#{bin}/sea-battle --list")
+  end
+end

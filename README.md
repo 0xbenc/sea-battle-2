@@ -4,8 +4,7 @@ Sea Battle 2 is a multiplayer recreation of Hasbro’s Battleship board game, pl
 in the terminal.
 
 
-Run `make run` for the live **Host / Join** menu (Go 1.26.3+ and the sibling
-`../dotmason` checkout are needed to build; `bin/sea-battle` is self-contained).
+Run `make run` for the live **Host / Join** menu (Go 1.26.3+ is needed to build; `bin/sea-battle` is self-contained).
 The host commands the Americans; the guest commands the brood.
 
 **Host → C copy invitation → send it privately → Join.** Join checks the clipboard and connects automatically when it finds an invitation. Otherwise, paste the invitation; no Enter is needed. If the terminal
@@ -221,3 +220,5 @@ See [single-player design and validation](design/SINGLE_PLAYER.md).
 For visual review of all eight victory/defeat outcomes, run `make preview-results`.
 Use 1–8 or arrow keys to switch scenes, Tab for charts, R for rematch waiting,
 Space to pause, D for compact size, and Q to exit. No match or network is started.
+
+Release builds and itch/Homebrew publishing are documented in [RELEASING.md](RELEASING.md). Player package instructions are in [PLAYING.md](PLAYING.md).

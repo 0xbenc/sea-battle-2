@@ -5,7 +5,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"git.occ.farm/occ/dotmason/art"
+	"sea-battle-2/internal/art"
 )
 
 //go:embed fleet.mason

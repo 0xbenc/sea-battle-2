@@ -2,9 +2,9 @@ package visual
 
 import (
 	"fmt"
-	"git.occ.farm/occ/dotmason/art"
 	"github.com/rivo/uniseg"
 	"reflect"
+	"sea-battle-2/internal/art"
 	"sea-battle-2/internal/assets"
 	"strings"
 	"testing"

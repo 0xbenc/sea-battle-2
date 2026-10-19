@@ -1,0 +1,109 @@
+name: Publish existing release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      destination:
+        required: false
+        default: all
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (no rebuild)
+        required: true
+        type: string
+      destination:
+        description: Destination to publish or retry
+        required: true
+        default: all
+        type: choice
+        options: [all, homebrew, itch]
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    name: Homebrew
+    if: ${{ (inputs.destination == 'all' || inputs.destination == 'homebrew') && !contains(inputs.tag, '-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: sea-battle-homebrew
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Fetch verified release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python3 packaging/release/fetch.py --tag "$RELEASE_TAG"
+      - name: Publish Homebrew formula
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          VERSION: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'TAP_GITHUB_TOKEN is missing; other publishers remain independent.' >&2; exit 1; }
+          gh auth setup-git
+          git clone --depth 1 --branch main https://github.com/0xbenc/homebrew-tap.git tap
+          python3 packaging/release/check-version.py "$VERSION" tap/Formula/sea-battle.rb
+          python3 packaging/homebrew/render.py "$VERSION" dist/checksums.txt tap/Formula/sea-battle.rb
+          cd tap
+          git config user.name goreleaserbot
+          git config user.email goreleaserbot@users.noreply.github.com
+          git add Formula/sea-battle.rb
+          if git diff --cached --quiet; then echo 'Formula already current'; exit 0; fi
+          git commit -m "Brew formula update for sea-battle version $VERSION"
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin HEAD:main; then exit 0; fi
+          done
+          echo 'Tap update failed; retry this destination for the same release tag.' >&2
+          exit 1
+
+  itch:
+    name: itch.io
+    if: ${{ (inputs.destination == 'all' || inputs.destination == 'itch') && !contains(inputs.tag, '-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: sea-battle-itch
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Fetch verified release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python3 packaging/release/fetch.py --tag "$RELEASE_TAG"
+      - name: Refuse replay of an older stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          latest=$(gh release view --repo 0xbenc/sea-battle-2 --json tagName --jq .tagName)
+          test "$latest" = "$RELEASE_TAG" || { echo 'Refusing to replace itch stable with an older release.' >&2; exit 1; }
+      - name: Restage itch packages from release binaries
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python3 packaging/itch/stage.py --version "$RELEASE_TAG"
+      - name: Install pinned Butler
+        run: bash packaging/itch/install-butler.sh "$RUNNER_TEMP/sea-battle-butler"
+      - name: Validate and publish itch channels
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+          RELEASE_VERSION: ${{ inputs.tag }}
+        run: |
+          test -n "$BUTLER_API_KEY" && test -n "$ITCH_TARGET" || { echo 'Configure BUTLER_API_KEY and ITCH_TARGET; other publishers remain independent.' >&2; exit 1; }
+          python3 packaging/itch/publish.py --target "$ITCH_TARGET" --version "$RELEASE_VERSION" --butler "$RUNNER_TEMP/sea-battle-butler/butler"

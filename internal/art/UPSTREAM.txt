@@ -1,0 +1,5 @@
+Source: OCC dotmason art package
+Revision: a692b33a969b84289d1906d845c8c752e0a382db
+Imported with owner permission for self-contained Sea Battle builds.
+Only art package source, tests and test fixtures are included.
+No editor, CLI, unrelated assets or repository history.

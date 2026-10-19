@@ -26,3 +26,9 @@ test-terminal: build
 .PHONY: preview-results
 preview-results: build
 	./bin/sea-battle --preview-results
+
+.PHONY: test-packaging
+test-packaging:
+	python3 -m unittest discover -s packaging/release -p 'test_*.py'
+	python3 -m unittest discover -s packaging/homebrew -p 'test_*.py'
+	python3 -m unittest discover -s packaging/itch -p 'test_*.py'

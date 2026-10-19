@@ -3,8 +3,8 @@ package visual
 
 import (
 	"fmt"
-	"git.occ.farm/occ/dotmason/art"
 	"math"
+	"sea-battle-2/internal/art"
 	"sea-battle-2/internal/assets"
 	"strings"
 	"unicode/utf8"

@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+project_name: sea-battle
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: sea-battle
+    main: .
+    binary: sea-battle
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+
+archives:
+  - id: sea-battle
+    ids:
+      - sea-battle
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - PLAYING.md
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next.{{ .ShortCommit }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  draft: false
+  prerelease: auto
+  name_template: "sea-battle {{ .Tag }}"
