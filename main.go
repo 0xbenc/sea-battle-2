@@ -121,9 +121,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ",":
 			m.state.Paused = true
 			m.state.T = math.Max(0, m.state.T-.1)
-		case "f2":
-			m.preferSD = !m.preferSD
-			m.state.SD = m.preferSD || m.width < 160 || m.height < 48
 		case "v":
 			current := m.state.Camera
 			if current == "" {
@@ -224,7 +221,7 @@ func (m model) View() tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.ReportFocus = true
-	v.WindowTitle = "Sea Battle 2 — Operation Pest Tide"
+	v.WindowTitle = "Sea Battle 2 — Operation: Unexpected Guests"
 	return v
 }
 func saveCapture(s visual.State) error {
@@ -313,7 +310,19 @@ func run() error {
 				return err
 			}
 		}
-		m, cleanup := play.New(play.Options{Difficulty: bot.Difficulty(*difficulty), Solo: *solo, Host: *host, Join: *join, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"})
+		opts := play.Options{Solo: *solo, Host: *host, Join: *join, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"}
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "difficulty" {
+				opts.Difficulty = bot.Difficulty(*difficulty)
+			}
+			if f.Name == "size" {
+				opts.DisplayExplicit = true
+			}
+		})
+		if dir, err := os.UserConfigDir(); err == nil {
+			opts.SettingsPath = filepath.Join(dir, "sea-battle-2", "settings.json")
+		}
+		m, cleanup := play.New(opts)
 		defer cleanup()
 		_, err := tea.NewProgram(m, tea.WithColorProfile(colorprofile.TrueColor)).Run()
 		return err

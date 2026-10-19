@@ -59,7 +59,7 @@ def main():
         read(1)
         check('GENERAL QUARTERS' in '\n'.join(screen.display),'HD startup')
         snapshot('pty-hd')
-        key('\x1bOQ');actual=snapshot('pty-sd-centered');check('SD' in '\n'.join(screen.display),'F2 prefers SD')
+        key('\x1bOQ');check('LOOKDEV / HD' in '\n'.join(screen.display),'Removed F2 toggle has no effect')
         resize(80,24);actual=snapshot('pty-sd')
         expected=frame('human-station','sd',3)
         # CLI dump advertises TOUR and no PAUSED; all image pixels outside chrome must match.
@@ -74,8 +74,7 @@ def main():
         key('\x1b[F');key('\r');check('CINEMATIC EXCESS' in '\n'.join(screen.display),'Scene deck selects last scene')
         key('?');check('LOOKDEV CONTROLS' in '\n'.join(screen.display),'Help opens');key('\x1b')
         resize(70,20);check('Need 80 columns' in '\n'.join(screen.display),'Undersize guidance')
-        resize(160,48);check('LOOKDEV / SD' in '\n'.join(screen.display),'Explicit SD preference survives resize')
-        key('\x1bOQ');check('LOOKDEV / HD' in '\n'.join(screen.display),'F2 returns to HD')
+        resize(160,48);check('LOOKDEV / HD' in '\n'.join(screen.display),'Resize restores HD')
         resize(80,24);check('LOOKDEV / SD' in '\n'.join(screen.display),'Automatic HD fallback')
         resize(160,48);check('LOOKDEV / HD' in '\n'.join(screen.display),'Automatic HD recovery')
         key(' ');before=pixels();read(.5);check(before!=pixels(),'Live animation advances')

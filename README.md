@@ -18,11 +18,23 @@ deploy early; **I** reopens the invitation console while hosting.
 Place ships with **arrows/WASD**, **1–5** selects a hull, **X** rotates, and
 **Enter** places/repositions it. **Backspace** lifts the selected hull.
 **R** arranges a valid random fleet; **Space** locks it in. Ships may touch.
-Once both commanders are ready, aim and press **Enter** to fire. One shot per
+Once both commanders are ready, hover or use **arrows/WASD** to aim on the large
+hostile chart; **click/Enter** fires. **Tab** or clicking the small chart switches
+between targeting and inspecting your fleet without firing. Click a fleet name
+to inspect that ship. Highlighted axes track your aim; foam ripples mark misses,
+bright flames mark hits, and submerged metal marks sunk hull cells. The fleet rack shows surviving hull cells,
+and each chart labels its latest shot. **?** opens the compact combat help panel.
+One shot per
 turn, including hits; the first to destroy all seventeen enemy squares wins.
 **Space/Enter** skips a result cinematic. **R** requests a rematch after the
 battle; both commanders must agree. The first starter is random and alternates
-on rematches. **F2** changes preferred HD/SD; **Q** leaves with confirmation.
+on rematches. **Q** leaves with confirmation.
+
+Finished battles have eight animated endings: close or overwhelming victory and
+matching defeat scenes for each faction. **Overwhelming means the winner retains
+at least 9 of 17 unhit hull cells**; 1–8 gives the close result. Both commanders
+see the same classification, calculated from confirmed damage. **Tab** switches
+between the ending and final charts; **R** requests a rematch.
 
 Direct launch options:
 
@@ -68,6 +80,18 @@ the current invitation again; the guest presses **J** while disconnected and
 pastes it to update routes for the same session. This preserves the match and
 rejects invitations for a different host/seat. No direct-only system can deliver
 a new address over a connection that no longer exists.
+
+The main menu offers **? Help**, **T Settings**, and **Q Quit**. All six main-menu
+controls support left-click and a subtle mouse-hover highlight. Clicking clear
+water makes a quick ripple (two-second cooldown); carrier clicks spark and title
+letters glint. Rocks, moving objects, and controls are excluded from water clicks.
+Settings include
+Auto/SD display, animated/still menu, and default solo difficulty. Preferences
+are saved in the OS user config directory under `sea-battle-2/settings.json`;
+explicit `--size` and `--difficulty` options override saved preferences.
+Single-player selection uses separate translucent faction panels, native fleet
+portraits in HD, and clickable difficulty choices. Team cards briefly flash
+before deploying; Back cancels a pending selection.
 
 The **40-scene lookdev showcase** remains available with `--lookdev`.
 **Tab** opens its scene deck; **Space** pauses, **R** replays, **F** slows motion.
@@ -144,7 +168,8 @@ Art presentation follows these additive principles:
   connects. Keep troubleshooting out of the normal Host/Join flow until needed.
 - **Terminal sizing follows ASCII Bowl:** HD is 160 columns × 48 rows (primary);
   SD is 80 × 24. Fall back to SD when HD cannot fit, restore HD when space permits,
-  use F2 to change the preferred size, and center the canvas in larger windows.
+  and center the canvas in larger windows. The in-game size toggle is removed;
+  `--size sd` remains available for deliberate SD review.
   Below SD, suspend local controls/animation and show resize guidance; the network
   session remains connected.
 - **Frontload the graphics:** establish compelling art, readable action, and a
@@ -160,7 +185,13 @@ Art presentation follows these additive principles:
 Press **S**, choose **1 Easy / 2 Medium / 3 Hard**, then **A** for the American
 navy or **B** for the brood. Medium is the default. The bot
 commands the other fleet, using only revealed shot results. No networking setup
-or connection is needed. Deploy manually or press **R**, then **Space** to ready.
+or connection is needed. Deployment shows only your own waters, with a larger
+board and a compact fleet list. Move the mouse or use arrows, then click/Enter
+to place; the next unplaced ship is selected automatically. Right-click/**X**
+rotates, **1–5/Tab** selects, **Delete** removes, and **U** undoes. Click a placed
+ship to move it; **Esc** cancels an unfinished move. **?** opens the control guide.
+Once all five ships are placed, review and **Space** to launch. **R** shuffles the
+fleet for a quick start. Locked fleets wait on this same own-waters screen.
 Both factions use the existing rules, consoles and skippable shot cinematics.
 
 `./bin/sea-battle --solo american --difficulty hard` starts deployment directly;

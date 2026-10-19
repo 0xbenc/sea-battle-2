@@ -20,6 +20,8 @@ import (
 )
 
 type Options struct {
+	SettingsPath    string
+	DisplayExplicit bool
 	Difficulty      bot.Difficulty
 	Solo            string
 	Host            bool
@@ -39,7 +41,27 @@ type shotPlayback struct {
 	game.Event
 	After game.View
 }
+type factionDeploy struct {
+	key    string
+	serial uint64
+}
+
 type Model struct {
+	inspectOwn, combatHelp                           bool
+	resultCharts                                     bool
+	resultStart                                      float64
+	ownCursor                                        game.Coord
+	placementUndo                                    []placementSnapshot
+	placementHelp                                    bool
+	factionPressed                                   string
+	factionSerial                                    uint64
+	menuReaction                                     visual.MenuReaction
+	reactionStart                                    float64
+	waterReadyAt                                     time.Time
+	menuHover                                        string
+	menuTime                                         float64
+	stillMenu                                        bool
+	menu                                             *visual.MenuDirector
 	opts                                             Options
 	session                                          *session.Controller
 	running, host, solo, returnMenu                  bool
@@ -60,9 +82,15 @@ type Model struct {
 }
 
 func New(opts Options) (Model, func()) {
-	opts.Difficulty = opts.Difficulty.Default()
+	prefs := readPreferences(opts.SettingsPath)
+	if opts.Difficulty == "" {
+		opts.Difficulty = prefs.Difficulty.Default()
+	}
+	if !opts.DisplayExplicit && !opts.SD {
+		opts.SD = prefs.Compact
+	}
 	controller := session.New(context.Background())
-	m := Model{opts: opts, session: controller, mode: "menu", preferSD: opts.SD, fleet: game.EmptyFleet()}
+	m := Model{menu: visual.NewMenuDirector(rand.Uint64()), opts: opts, session: controller, mode: "menu", stillMenu: prefs.StillMenu, preferSD: opts.SD, fleet: game.EmptyFleet()}
 	if opts.Host || opts.Join != "" || opts.Solo != "" {
 		m.mode = "connecting"
 	}
@@ -131,10 +159,14 @@ func (m *Model) finishClip() {
 	if len(m.clips) == 0 && m.state != nil {
 		snapshot := cloneView(*m.state)
 		m.visible = &snapshot
+		if snapshot.Phase == "finished" {
+			m.resultStart = m.t
+			m.resultCharts = false
+		}
 	}
 }
 
-const handoffDuration = .8
+const handoffDuration = 2.0
 
 func (m Model) handoff() bool {
 	return m.solo && m.state != nil && len(m.clips) > 0 && m.clips[0].Player != m.state.Player
@@ -156,13 +188,73 @@ func (m Model) fits() bool { return m.width >= 80 && m.height >= 24 }
 func (m Model) sd() bool   { return m.preferSD || m.width < 160 || m.height < 48 }
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case factionDeploy:
+		if m.mode == "faction" && v.serial == m.factionSerial && m.factionPressed == v.key {
+			return m.Update(tea.KeyPressMsg(tea.Key{Code: []rune(v.key)[0]}))
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
+		m.menuHover = ""
 		m.width, m.height = v.Width, v.Height
+	case tea.MouseMsg:
+		if (m.mode != "menu" && m.mode != "faction" && !m.placementScreen() && !m.combatScreen()) || m.quitting || !m.fits() {
+			return m, nil
+		}
+		mouse := v.Mouse()
+		w, h := 160, 48
+		if m.sd() {
+			w, h = 80, 24
+		}
+		x, y := mouse.X-(m.width-w)/2, mouse.Y-(m.height-h)/2
+		if m.placementScreen() {
+			return m.placementMouse(v, x, y)
+		}
+		if m.combatScreen() {
+			return m.combatMouse(v, x, y)
+		}
+		m.menuHover = visual.MenuControlAt(m.sd(), x, y)
+		if m.mode == "faction" {
+			m.menuHover = visual.FactionControlAt(m.sd(), x, y)
+		}
+		if _, clicked := v.(tea.MouseClickMsg); clicked && mouse.Button == tea.MouseLeft {
+			if m.menuHover != "" {
+				if m.mode == "faction" && (m.menuHover == "a" || m.menuHover == "b") {
+					m.factionSerial++
+					m.factionPressed = m.menuHover
+					message := factionDeploy{m.menuHover, m.factionSerial}
+					return m, tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return message })
+				}
+				code := []rune(m.menuHover)[0]
+				if m.menuHover == "esc" {
+					code = tea.KeyEscape
+				}
+				return m.Update(tea.KeyPressMsg(tea.Key{Code: code}))
+			}
+			if m.mode == "faction" {
+				return m, nil
+			}
+			fx := visual.MenuReactionAt(m.sd(), m.menu.Snapshot(), x, y)
+			if fx.Kind != "" {
+				now := time.Now()
+				if fx.Kind == "ripple" {
+					if now.Before(m.waterReadyAt) {
+						return m, nil
+					}
+					m.waterReadyAt = now.Add(2 * time.Second)
+				}
+				m.menuReaction, m.reactionStart = fx, m.t
+			}
+		}
+		return m, nil
 	case clockTick:
 		now := time.Time(v)
 		if !m.last.IsZero() && m.fits() {
 			dt := min(.12, now.Sub(m.last).Seconds())
 			m.t += dt
+			if !m.stillMenu && (m.mode != "game" || m.invitation || m.quitting) {
+				m.menuTime += dt
+				m.menu.Advance(dt)
+			}
 			if len(m.clips) > 0 && !m.invitation {
 				m.clipTime += dt
 				duration := m.clipDuration()
@@ -236,6 +328,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch v.Type {
 		case "state":
 			previous := m.state
+			if v.View.Phase == "finished" && (previous == nil || previous.Phase != "finished") {
+				m.resultStart = m.t
+				m.resultCharts = false
+			}
 			// Each live state is an immutable post-shot snapshot. Reconnect/catch-up
 			// replaces presentation atomically rather than inventing intermediate boards.
 			delta := 0
@@ -250,6 +346,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				e := v.View.Events[len(v.View.Events)-1]
 				m.clips = append(m.clips, shotPlayback{Event: e, After: cloneView(*v.View)})
+				m.combatHelp = false
 			} else if !live || delta != 0 {
 				m.clips = nil
 				m.clipTime = 0
@@ -265,6 +362,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.clips = nil
 				m.clipTime = 0
 				m.selected = 0
+				m.cursor = game.Coord{}
+				m.horizontal = false
+				m.placementUndo = nil
+				m.placementHelp = false
+				m.inspectOwn, m.combatHelp = false, false
+				m.resultCharts = false
+				m.resultStart = m.t
+				m.ownCursor = game.Coord{}
+			}
+			if previous != nil && previous.Phase == "placement" && v.View.Phase == "battle" {
+				m.cursor = game.Coord{}
+				m.selected = -1
+				m.placementUndo = nil
+				m.placementHelp = false
+				m.notice = ""
 			}
 			if m.offline || m.pending {
 				m.notice = ""
@@ -311,6 +423,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input = cleanInput(v.Content)
 		}
 	case tea.KeyPressMsg:
+		m.factionPressed = ""
+		m.factionSerial++
+		m.menuHover = ""
 		k := v.String()
 		if k == "ctrl+c" {
 			return m, tea.Quit
@@ -344,6 +459,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.input = cleanInput(m.input + v.Key().Text)
 				}
 			}
+			return m, nil
+		}
+		if m.combatScreen() && m.combatHelp {
+			if k == "esc" || k == "?" {
+				m.combatHelp = false
+			}
+			if k != "q" {
+				return m, nil
+			}
+		}
+		if m.combatScreen() && k == "esc" && !m.solo {
+			if m.state.Phase == "finished" {
+				m.session.Stop()
+				m.mode = "menu"
+				m.running = false
+				return m, nil
+			}
+			m.quitting, m.returnMenu = true, true
+			return m, nil
+		}
+		if m.placementScreen() && m.placementHelp {
+			if k == "esc" || k == "?" {
+				m.placementHelp = false
+			}
+			if k != "q" {
+				return m, nil
+			}
+		}
+		if m.placementScreen() && k == "?" {
+			m.placementHelp = true
+			return m, nil
+		}
+		if m.placementEditable() && k == "esc" && m.placementDirty() {
+			m.selectPlacementShip(m.selected)
+			m.selected = -1
+			return m, nil
+		}
+		if m.placementScreen() && k == "esc" && !m.solo {
+			m.quitting, m.returnMenu = true, true
 			return m, nil
 		}
 		if m.quitting {
@@ -393,15 +547,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.returnMenu = true
 			return m, nil
 		}
-		if k == "f2" {
-			m.preferSD = !m.preferSD
+		if !m.fits() {
 			return m, nil
 		}
-		if !m.fits() {
+		if m.mode == "help" || m.mode == "settings" {
+			if k == "esc" || (m.mode == "help" && k == "?") {
+				m.mode, m.notice = "menu", ""
+				return m, nil
+			}
+			if m.mode == "settings" {
+				switch k {
+				case "d":
+					m.preferSD = !m.preferSD
+				case "m":
+					m.stillMenu = !m.stillMenu
+				case "1":
+					m.opts.Difficulty = bot.Easy
+				case "2":
+					m.opts.Difficulty = bot.Medium
+				case "3":
+					m.opts.Difficulty = bot.Hard
+				default:
+					return m, nil
+				}
+				m.savePreferences()
+			}
 			return m, nil
 		}
 		if m.mode == "menu" {
 			switch k {
+			case "?":
+				m.mode, m.notice = "help", ""
+			case "t":
+				m.mode, m.notice = "settings", ""
 			case "s":
 				m.mode = "faction"
 				m.notice = ""
@@ -465,45 +643,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		switch k {
-		case "up", "w":
-			m.cursor.Y = max(0, m.cursor.Y-1)
-		case "down", "s":
-			m.cursor.Y = min(9, m.cursor.Y+1)
-		case "left", "a":
-			m.cursor.X = max(0, m.cursor.X-1)
-		case "right", "d":
-			m.cursor.X = min(9, m.cursor.X+1)
-		}
-		p := m.state.Player
-		if m.state.Phase == "placement" && !m.state.Ready[p] && !m.pending {
-			switch k {
-			case "1", "2", "3", "4", "5":
-				m.selected = int(k[0] - '1')
-			case "x":
-				m.horizontal = !m.horizontal
-			case "r":
-				m.fleet = game.RandomFleet(rand.Uint64())
-				m.notice = "Fleet arranged. SPACE locks it in."
-			case "backspace", "delete":
-				m.fleet[m.selected] = game.EmptyFleet()[0]
-			case "enter":
-				p := game.Placement{Coord: m.cursor, Horizontal: m.horizontal}
-				if game.CanPlace(m.fleet, m.selected, p) {
-					m.fleet[m.selected] = p
-					m.selected = (m.selected + 1) % 5
-					m.notice = "Ship placed."
-				} else {
-					m.notice = "Hull overlaps another ship or crosses the chart edge."
+		if m.combatScreen() {
+			if k == "?" {
+				m.combatHelp = true
+				return m, nil
+			}
+			if k == "tab" {
+				if m.visible != nil && m.visible.Phase == "finished" {
+					m.resultCharts = !m.resultCharts
+					m.notice = ""
+					return m, nil
 				}
-			case "space":
-				if err := game.ValidateFleet(m.fleet); err != nil {
-					m.notice = err.Error()
-				} else if !m.offline {
-					m.pending = true
-					return m, m.send(peer.Command{Type: "ready", Fleet: append([]game.Placement(nil), m.fleet...)})
+				m.inspectOwn = !m.inspectOwn
+				m.notice = ""
+				return m, nil
+			}
+			if m.inspectOwn {
+				if k == "enter" {
+					m.inspectOwn = false
+					return m, nil
+				}
+				next := moveAim(m.ownCursor, k)
+				if next != m.ownCursor {
+					m.ownCursor = next
+					m.notice = ""
+					return m, nil
+				}
+			} else if !m.pending {
+				next := moveAim(m.cursor, k)
+				if next != m.cursor {
+					m.cursor = next
+					m.notice = ""
 				}
 			}
+		} else {
+			m.cursor = moveAim(m.cursor, k)
+		}
+
+		p := m.state.Player
+		if m.state.Phase == "placement" && !m.state.Ready[p] && !m.pending {
+			if k == "up" || k == "down" || k == "left" || k == "right" || k == "w" || k == "a" || k == "s" || k == "d" {
+				m.notice = ""
+			}
+			cmd := m.placementKey(k)
+			return m, cmd
 		} else if m.state.Phase == "battle" && k == "enter" && !m.pending && !m.offline {
 			if !m.state.Connected[0] || !m.state.Connected[1] {
 				m.notice = "Both commanders must be connected."
@@ -515,7 +698,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pending = true
 				return m, m.send(peer.Command{Type: "fire", At: m.cursor})
 			}
-		} else if m.state.Phase == "finished" && k == "r" && !m.pending && !m.offline {
+		} else if m.state.Phase == "finished" && k == "r" && !m.pending && !m.offline && !m.state.Rematch[p] {
 			m.pending = true
 			return m, m.send(peer.Command{Type: "rematch"})
 		}
@@ -558,45 +741,33 @@ func (m Model) View() tea.View {
 		if m.host {
 			detail = "Closing the host ends this session for both players."
 		}
-		f = visual.RenderFront(m.sd(), m.t, "LEAVE COMMAND?", []string{detail, "", "Y / ENTER leave    N / ESC return"})
+		f = m.front("LEAVE COMMAND?", []string{detail, "", "Y / ENTER leave    N / ESC return"})
 	case m.mode == "menu":
-		f = visual.RenderFront(m.sd(), m.t, "SEA BATTLE 2 / OPERATION PEST TIDE", []string{"S  Single player / Choose your faction", "", "H  Host a battle / American navy", "J  Join by invitation / The brood", "", "One commander hosts. The other pastes their invitation.", "No accounts. No shared servers.", "", "Lookdev remains available with --lookdev.", "", "Q quit    F2 SD / HD", "", m.notice})
+		reaction := m.menuReaction
+		reaction.Age = m.t - m.reactionStart
+		f = visual.RenderMenuWithHover(m.sd(), m.menuTime, m.notice, m.menuHover, m.menu.Snapshot(), reaction)
+	case m.mode == "help":
+		f = m.front("FIELD MANUAL", helpLines)
+	case m.mode == "settings":
+		f = m.front("SETTINGS", m.settingsLines())
 	case m.mode == "faction":
-		f = visual.RenderFront(m.sd(), m.t, "SINGLE PLAYER / CHOOSE COMMAND", []string{"A  American navy", "   Steel hulls. Questionable diplomacy.", "", "B  The brood", "   Organic nastiness. Some assembly assimilated.", "", "The computer commands the other fleet.", "1 Easy     2 Medium     3 Hard", "Difficulty: " + strings.ToUpper(string(m.opts.Difficulty)), "All opponents follow hits. No hidden information.", "", "A / B deploy    ESC back    F2 size    Q quit"})
+		f = visual.RenderFactionMenu(m.sd(), m.menuTime, string(m.opts.Difficulty), m.menuHover, m.factionPressed, m.menu.Snapshot())
 	case m.mode == "join" || m.mode == "rejoin":
 		tail := m.input
 		if len(tail) > 52 {
 			tail = "..." + tail[len(tail)-49:]
 		}
-		f = visual.RenderFront(m.sd(), m.t, "JOIN THE BROOD", []string{"Paste the complete sb2: invitation.", "Wrapped invitations are accepted.", "", tail, "", fmt.Sprintf("%d characters", len(m.input)), "", "ENTER connect    BACKSPACE edit    ESC back", m.notice})
+		f = m.front("JOIN THE BROOD", []string{"Paste the complete sb2: invitation.", "Wrapped invitations are accepted.", "", tail, "", fmt.Sprintf("%d characters", len(m.input)), "", "ENTER connect    BACKSPACE edit    ESC back", m.notice})
 	case m.invitation && m.host:
-		f = visual.RenderFront(m.sd(), m.t, "HOST INVITATION / KEEP PRIVATE", []string{
+		f = m.front("HOST INVITATION / KEEP PRIVATE", []string{
 			"C copy invitation    S save invitation.txt    ENTER deploy", "", m.routerStatus, "",
 			fmt.Sprintf("Private invitation: %d characters", len(m.invite)), m.invite[:min(50, len(m.invite))] + "...", "Use C or S for the COMPLETE invitation.", "", "TCP " + strconv.Itoa(m.port) + " / host must remain running",
 			"Manual: --host --advertise PUBLIC_IP:PORT (forward TCP).",
 			"If upstream NAT blocks both hosts, use reachable IPv6 or LAN.", "", m.notice})
 	case m.state == nil:
-		f = visual.RenderFront(m.sd(), m.t, "ESTABLISHING COMMAND", []string{"Connecting directly to the host...", "", "No relay fallback is used.", "If this persists: check the host is still running, allow its TCP", "port through the firewall, or try the other player hosting.", "For upstream NAT/CGNAT: use reachable IPv6 or the same LAN.", "", "ESC back    Q quit", m.notice})
+		f = m.front("ESTABLISHING COMMAND", []string{"Connecting directly to the host...", "", "No relay fallback is used.", "If this persists: check the host is still running, allow its TCP", "port through the firewall, or try the other player hosting.", "For upstream NAT/CGNAT: use reachable IPv6 or the same LAN.", "", "ESC back    Q quit", m.notice})
 	default:
-		v := *m.state
-		if m.visible != nil {
-			v = *m.visible
-		}
-		// Link health is immediate; game progress follows the shot timeline.
-		v.Connected = m.state.Connected
-		if m.offline {
-			v.Connected = [2]bool{}
-		}
-		b := visual.BattlePresentation{State: v, Fleet: m.fleet, Cursor: m.cursor, Selected: m.selected, Horizontal: m.horizontal, SD: m.sd(), T: m.t, Notice: m.notice, Pending: m.pending, Solo: m.solo, Difficulty: string(m.opts.Difficulty)}
-		if len(m.clips) > 0 {
-			b.Clip = &m.clips[0].Event
-			b.ClipTime = m.clipTime
-			if m.handoff() {
-				b.Handoff = m.clipTime < handoffDuration
-				b.ClipTime = max(0, m.clipTime-handoffDuration)
-			}
-		}
-		f = visual.RenderBattle(b)
+		f = visual.RenderBattle(m.battlePresentation())
 	}
 	content := ""
 	if !m.fits() {
@@ -611,6 +782,13 @@ func (m Model) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	if (m.mode == "menu" || m.mode == "faction" || m.placementScreen() || m.combatScreen()) && !m.quitting && m.fits() {
+		v.MouseMode = tea.MouseModeAllMotion
+	}
 	v.WindowTitle = "Sea Battle 2 / Live command"
 	return v
+}
+
+func (m Model) front(title string, lines []string) *visual.Frame {
+	return visual.RenderFront(m.sd(), m.menuTime, title, lines, m.menu.Snapshot())
 }

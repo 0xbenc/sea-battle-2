@@ -31,7 +31,10 @@ func TestBattlePresentation(t *testing.T) {
 				if f.W != w || f.H != h || len(f.Cells) != w*h {
 					t.Fatal("size")
 				}
-				if !strings.Contains(f.Plain(), "HOSTILE WATERS") {
+				if phase == "placement" && (strings.Contains(f.Plain(), "HOSTILE WATERS") || !strings.Contains(f.Plain(), "YOUR WATERS")) {
+					t.Fatal("placement must show only own waters")
+				}
+				if phase == "battle" && !strings.Contains(f.Plain(), "HOSTILE WATERS") {
 					t.Fatal("missing chart")
 				}
 				capture(t, f, phase, sd, player)
@@ -40,8 +43,17 @@ func TestBattlePresentation(t *testing.T) {
 				b.Clip = &e
 				b.ClipTime = 2
 				f := RenderBattle(b)
-				if !strings.Contains(f.Plain(), "J10") {
-					t.Fatal("cinema target is not actual shot")
+				r := New(f.W, f.H)
+				r.battleClip(b, DefaultState())
+				labels := 0
+				if e.Sunk {
+					labels = 1 // Only the destroyed ship's name accompanies the pixel title.
+				}
+				if len(r.Texts) != labels || len(CombatControls(b)) != 0 {
+					t.Fatal("cutscene has extra labels or invisible mouse controls")
+				}
+				if strings.Contains(f.Plain(), "J10") || strings.Contains(f.Plain(), "TRANSMISSION") {
+					t.Fatal("cutscene contains tactical clutter")
 				}
 				if e.Ship < 0 && strings.Contains(f.Plain(), "Hive Carrier") {
 					t.Fatal("unidentified enemy leaked")
@@ -86,18 +98,17 @@ func TestReadableShotChartsAndHandoff(t *testing.T) {
 			v.Incoming[40] = game.Miss
 			b := BattlePresentation{State: v, SD: sd, Solo: true, Cursor: game.Coord{X: 1, Y: 3}}
 			f := RenderBattle(b)
-			if !strings.Contains(f.Plain(), "B4 = column B, row 4") {
+			if !strings.Contains(f.Plain(), "B4 / MISS") {
 				t.Fatal("coordinate guide missing")
 			}
-			x, y, cw, ch := 92, 18, 6, 4
-			if sd {
-				x, y, cw, ch = 45, 10, 3, 2
+			grid, _ := CombatBoards(sd, false)
+			x, y, cw := grid.X, grid.Y, grid.CW
+
+			accent := Gold
+			if player == 1 {
+				accent = Green
 			}
-			cell := f.Cells[(y/2+3*ch/2+ch/4)*f.W+x+cw+cw/2]
-			if cell.Ch != "O" {
-				t.Fatal("miss not centered in B4", cell)
-			}
-			if f.Cells[(y/2-1)*f.W+x+cw+cw/2].BG != Gold {
+			if f.Cells[(y/2-1)*f.W+x+cw+cw/2].BG != accent {
 				t.Fatal("column not highlighted")
 			}
 			capture(t, f, "readable-chart", sd, player)
@@ -105,15 +116,15 @@ func TestReadableShotChartsAndHandoff(t *testing.T) {
 			b.Clip = &e
 			b.Handoff = true
 			f = RenderBattle(b)
-			if !strings.Contains(f.Plain(), "ENEMY TURN") {
-				t.Fatal("handoff missing")
+			if strings.Contains(f.Plain(), "ENEMY TAKING AIM") {
+				t.Fatal("solo fade contains the old interstitial")
 			}
 			capture(t, f, "handoff", sd, player)
 			b.Handoff = false
 			b.ClipTime = .5
 			f = RenderBattle(b)
-			if !strings.Contains(f.Plain(), "ENEMY SHOT / INCOMING") {
-				t.Fatal("shooter missing")
+			if strings.Contains(f.Plain(), "ENEMY SHOT / INCOMING") {
+				t.Fatal("cutscene contains old shooter banner")
 			}
 			capture(t, f, "incoming-miss", sd, player)
 		}

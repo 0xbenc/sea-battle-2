@@ -37,7 +37,7 @@ class Terminal:
         picture(dict(W=self.screen.columns,H=self.screen.lines,Cells=cells)).save(ROOT/'captures'/name)
     def stop(self):
         if self.proc.poll() is None:
-            self.key('\x03');self.proc.wait(timeout=5)
+            self.key('\x03');self.read(.7);self.proc.wait(timeout=5)
         assert self.proc.returncode==0
         assert termios.tcgetattr(self.slave)==self.original
     def close(self):
@@ -63,7 +63,7 @@ def main():
             b.key('j');b.key('\x1b[200~'+invite+'\x1b[201~')
             b.key('\r')
             check('B / THE BROOD' in b.read(.8),'Pasted invitation joins alien seat')
-            check('FRIENDLY WATERS' in a.read(.3),'Host automatically deploys when guest joins')
+            check('YOUR WATERS' in a.read(.3),'Host automatically deploys when guest joins')
             a.key('r');a.key(' ')
             check('FLEET LOCKED' in a.read(.3),'Host fleet locks')
             b.key('r');b.key(' ')
@@ -72,13 +72,13 @@ def main():
             first=a if 'YOUR TURN' in sa else b
             other=b if first is a else a
             first.key('\r');a.read(.3);b.read(.3)
-            check('A1' in a.read() and 'A1' in b.read(),'Same real shot coordinate in both cinematics')
+            check('HOSTILE WATERS' not in a.read() and 'HOSTILE WATERS' not in b.read(),'Both peers enter the impact cinematic')
             a.key(' ');b.key(' ')
             sa,sb=a.read(),b.read()
-            check('LAST: A1' in sa and 'LAST: A1' in sb,'Both charts confirm the same shot')
+            check('A1 /' in sa and 'A1 /' in sb,'Both charts confirm the same shot')
             check('YOUR TURN' in other.read(),'Turn passes after one shot')
             other.key('d');other.key('\r');a.read(.2);b.read(.2);a.key(' ');b.key(' ')
-            check('LAST: B1' in a.read() and 'LAST: B1' in b.read(),'Second turn resolves through server')
+            check('B1 /' in a.read() and 'B1 /' in b.read(),'Second turn resolves through server')
             a.capture('live-pty-human-sd.png');b.capture('live-pty-alien-sd.png')
             check('Need 80 x 24' in a.resize(70,20),'Undersize gates play')
             check('FRIENDLY WATERS' in a.resize(160,48),'HD recovers after resize')
@@ -87,7 +87,7 @@ def main():
             check('LINK LOST' in a.read(.5),'Disconnect pauses battle')
             b=Terminal(['--join-file',str(temp/'invitation.txt')],temp);terminals.append(b)
             check('BATTLE' in b.read(1),'Same invitation reconnects to existing match')
-            check('LAST: B1' in b.read(),'Reconnect restores shot history')
+            check('B1 /' in b.read(),'Reconnect restores shot history')
             a.read(.3);a.key('q')
             check('Closing the host ends' in a.read(),'Host quit confirmation explains session lifetime')
             a.key('n');a.stop();b.stop()

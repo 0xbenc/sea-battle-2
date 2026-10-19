@@ -6,6 +6,7 @@ import (
 	"sea-battle-2/internal/game"
 	"sea-battle-2/internal/peer"
 	"sea-battle-2/internal/session"
+	"sea-battle-2/internal/visual"
 	"strings"
 	"testing"
 	"time"
@@ -42,10 +43,12 @@ func TestPlacementAndInputGates(t *testing.T) {
 	if m.selected != 4 {
 		t.Fatal("ship selector")
 	}
+	orientation := m.horizontal
 	m = apply(m, key("x"))
-	if !m.horizontal {
+	if m.horizontal == orientation {
 		t.Fatal("rotation")
 	}
+	m.cursor = game.Coord{}
 	m.width = 70
 	m = apply(m, key("right"))
 	if m.cursor.X != 0 {
@@ -302,15 +305,15 @@ func TestMissTimingAndEnemyHandoff(t *testing.T) {
 		m.last = start
 		m.clipTime = 1.95
 		m = apply(m, clockTick(start.Add(100*time.Millisecond)))
-		if len(m.clips) != 1 || !m.handoff() || m.clipDuration() != 2.8 {
+		if len(m.clips) != 1 || !m.handoff() || m.clipDuration() != 4 {
 			t.Fatal("missing enemy handoff")
 		}
 		m.clips[0].Hit = true
-		if m.clipDuration() != 4.3 {
+		if m.clipDuration() != 5.5 {
 			t.Fatal("hit timing changed")
 		}
 		m.clips[0].Sunk = true
-		if m.clipDuration() != 6.8 {
+		if m.clipDuration() != 8 {
 			t.Fatal("sink timing changed")
 		}
 		cleanup()
@@ -395,5 +398,38 @@ func TestDifficultySelection(t *testing.T) {
 		if string(m.opts.Difficulty) != d || m.mode != "faction" {
 			t.Fatal("difficulty selection", d)
 		}
+	}
+}
+
+func TestMenuDirectorFollowsTicksNotViews(t *testing.T) {
+	m, close := New(Options{})
+	defer close()
+	m.width, m.height = 80, 24
+	m.menu = visual.NewMenuDirector(55)
+	expected := visual.NewMenuDirector(55)
+	start := time.Unix(100, 0)
+	for i := 0; i <= 400; i++ {
+		m = apply(m, clockTick(start.Add(time.Duration(i)*100*time.Millisecond)))
+		if i > 0 {
+			expected.Advance(.1)
+		}
+		if m.menu.Snapshot() != expected.Snapshot() {
+			t.Fatal("menu director missed a tick")
+		}
+		if i%50 == 0 {
+			before := m.menu.Snapshot()
+			m.View()
+			m.View()
+			m = apply(m, tea.WindowSizeMsg{Width: 160, Height: 48})
+			if m.menu.Snapshot() != before {
+				t.Fatal("view or resize advanced the story")
+			}
+		}
+	}
+	before := m.menu.Snapshot()
+	m.mode = "game"
+	m = apply(m, clockTick(start.Add(40100*time.Millisecond)))
+	if m.menu.Snapshot() != before {
+		t.Fatal("hidden menu advanced during gameplay")
 	}
 }

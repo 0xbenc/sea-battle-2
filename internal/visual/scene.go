@@ -73,9 +73,9 @@ func (r *Raster) chrome(st State, s Scene) {
 	}
 	r.text(2, 1, title, accent)
 	r.plaque(0, h-2, r.W, 2, Ink)
-	footer := "[Tab] SCENES   [← →] CUT   [Space] PAUSE   [R] REPLAY   [T] TOUR   [V] CAMERA   [W] SEA   [F2] HD/SD   [?] HELP   [Q] EXIT"
+	footer := "[Tab] SCENES   [← →] CUT   [Space] PAUSE   [R] REPLAY   [T] TOUR   [V] CAMERA   [W] SEA   [?] HELP   [Q] EXIT"
 	if st.SD {
-		footer = "Tab SCENES  ← → CUT  Space PAUSE  R REPLAY  T TOUR  F2 SIZE  ? HELP  Q EXIT"
+		footer = "Tab SCENES  ← → CUT  Space PAUSE  R REPLAY  T TOUR  ? HELP  Q EXIT"
 	}
 	r.text(2, h-1, footer, Muted)
 	n := fmt.Sprintf("%02d/%02d", st.Scene+1, len(Scenes))
@@ -93,6 +93,9 @@ func short(s string, n int) string {
 	return s[:max(0, n-3)] + "..."
 }
 func (r *Raster) cinema(st State, s Scene, weather int, camera string) {
+	r.cinemaScene(st, s, weather, camera, true)
+}
+func (r *Raster) cinemaScene(st State, s Scene, weather int, camera string, showHUD bool) {
 	t := st.T
 	scale := float64(r.W) / 160
 	top := camera == "TOP"
@@ -163,11 +166,11 @@ func (r *Raster) cinema(st State, s Scene, weather int, camera string) {
 			logoRow = 5
 			subtitleRow = 12
 		}
-		r.bigWord("SEA BATTLE", logoRow, Bone)
-		r.center(subtitleRow, "II / OPERATION PEST TIDE", Gold)
+		r.bigWord("SEA BATTLE II", logoRow, Bone)
+		r.center(subtitleRow, "OPERATION: UNEXPECTED GUESTS", Gold)
 		phase = "UNIDENTIFIED CONTACTS / RANGE CLOSING"
 		if t > 5 {
-			phase = "OPERATION: PEST TIDE"
+			phase = "OPERATION: UNEXPECTED GUESTS"
 		}
 		// Small hostile silhouettes on the far horizon.
 		for i := 0; i < 4; i++ {
@@ -253,6 +256,9 @@ func (r *Raster) cinema(st State, s Scene, weather int, camera string) {
 		}
 	}
 	r.rain(t, weather)
+	if !showHUD {
+		return
+	}
 	if s.Kind == Result {
 		word := "VICTORY"
 		if s.Team == 1 {
@@ -355,7 +361,15 @@ func (r *Raster) underwater(st State, s Scene) {
 }
 
 var letters = map[rune][]string{
+	'W': {"#   #", "#   #", "# # #", "## ##", "#   #"},
+	'H': {"#   #", "#   #", "#####", "#   #", "#   #"},
+	'M': {"#   #", "## ##", "# # #", "#   #", "#   #"},
+	'U': {"#   #", "#   #", "#   #", "#   #", " ### "},
+	'N': {"#   #", "##  #", "# # #", "#  ##", "#   #"},
+	'K': {"#   #", "#  # ", "###  ", "#  # ", "#   #"},
+	'!': {"#", "#", "#", " ", "#"},
 	' ': {"   ", "   ", "   ", "   ", "   "},
+	'2': {"#### ", "    #", " ### ", "#    ", "#####"},
 	'S': {" ####", "#    ", " ### ", "    #", "#### "},
 	'B': {"#### ", "#   #", "#### ", "#   #", "#### "},
 	'L': {"#    ", "#    ", "#    ", "#    ", "#####"},

@@ -4,7 +4,7 @@
 > not the live game; see [README](../README.md) for multiplayer controls.
 > Live placement also adds twenty native horizontal tactical hull canvases.
 
-# Operation Pest Tide — lookdev review
+# Operation: Unexpected Guests — lookdev review
 
 This is a playable presentation laboratory, not the multiplayer game. It has 40
 scripted scenes, both faction consoles, the ten agreed ships, native HD/SD art,
@@ -50,7 +50,6 @@ stops the tour and holds its final frame until replayed. T restores the tour.
 | X | Rotate the destroyer placement ghost |
 | Enter | Fire a scripted shot from either command station |
 | B | Return to the corresponding command station |
-| F2 | Change preferred HD / SD size |
 | F6 | Save the current terminal cells as JSON in `captures/` |
 | ? / Esc | Open / close help |
 | Q / Ctrl+C | Exit and restore the terminal |
@@ -169,3 +168,111 @@ not a claim that this is the final pacing or cutscene frequency of the game.
   machine in the included benchmark. Actual terminal throughput can differ.
 - Dotmason and ASCII Bowl source files were not modified. Their loader/runtime
   tests passed during the initial integration assessment.
+
+## Title-screen idle direction
+
+A session-owned director now replaces the fixed-period loops. Play supplies a
+fresh random seed at startup; captures use explicit seeds. Story selection,
+variants, and wait times are drawn once by the director, never by rendering.
+Resizing, extra View calls, and frame drops cannot reroll a story. Scheduling uses
+bounded state and handles elapsed-time jumps in chronological order.
+
+The opening waits 5–10 seconds. Major stories run to completion, followed by
+10–20 seconds of quiet before the next story. Each shuffled round plays all nine major events once before any repeats.
+Round boundaries also prevent immediate repeats, and dogfight/bombing sorties
+never run consecutively. Ambient
+shoreline bursts, radar and defensive fire have separate 35–75-second waits and
+are moved into quiet gaps so they cannot interrupt or obscure a major story.
+Title glints also wait 35–75 seconds between sweeps.
+
+The story pool:
+- Jet sortie: deck doors open, an elevator raises the jet, then launch, distant
+  pass, pursuit, and destruction or a landing. A surviving aircraft arrests on
+  deck, lowers into the hangar, and the doors close; no jet idles on the deck.
+  Takeoff has a brief tension beat, a fast accelerating catapult stroke, and
+  lingering deck steam; climb begins as the jet clears the bow.
+  Curved pursuit paths preserve velocity through the banked reversal. Landing
+  uses a steady approach, flare, visible gear, and a decelerating arrested rollout.
+  Some pursuits climb behind the title's actual letter mask.
+- Distant bombing: the sortie returns as a tiny aircraft, follows one broad curved
+  swoop beneath the subtitle, drops five bombs on
+  shoreline cells, and comes home. This replaces the pursuit entirely.
+- Brood missile sub: purple chitin and mint biotech surface, launch three arcing
+  organic missiles into shoreline targets, then submerge.
+- Hostile resupply: helicopter winches down a crate and leaves. After a beat,
+  the crate waits an extra three seconds, opens its eyes, sprouts legs, scuttles across deck and leaps overboard.
+- Flare escape: a damaged jet drops a fan of flares. The pursuer abandons the
+  aircraft to bite one, with predictable consequences.
+- Bad landing: a violet troop sac skips three times across the sea, then crashes
+  into the beach.
+- Shore awakening: a chitin cannon unfolds from the land, charges, and lobs a
+  glowing projectile over the carrier into an American escort entering from the
+  right in the midground. Impact hits its superstructure; secondary explosions,
+  fire, smoke, and a bow-down list follow.
+- Leviathan: a luminous spined back briefly rises behind the carrier.
+- Popup CIWS: a hooked chitin drone dives into a continuous sweeping turn, its body
+  following the flight direction without hovering at the turnarounds.
+  A split hatch opens and the radar-topped rotary gun snaps up. Three tightening
+  tracer bursts, recoil, muzzle flash, and ejected brass lead into armor hits,
+  dismemberment, tumbling wreckage, and a splash. The gun cools and retracts.
+
+Live deployment uses a separate own-waters composition: a 40×30 half-pixel board
+at SD and 80×60 at HD, with a compact faction-tinted fleet rack. Ship-shaped
+previews show valid/blocked positions, then disappear for the complete-fleet
+review. Only one contextual coaching line remains; extended controls live in
+the `?` panel. Mouse and keyboard share placement, edit, undo, shuffle, and launch
+actions. Pending/locked fleets cannot be edited. `tools/placement_pty_review.py`
+checks manual mouse placement through launch for both factions and sizes.
+
+Live combat gives hostile waters the large deployment-sized chart and keeps your
+fleet on a smaller chart beside a hull-cell damage rack. Tab or a small-chart
+click swaps focus; fleet-name clicks inspect the corresponding friendly ship.
+Inspection never fires or silently moves the saved target. Row/column highlights,
+cell-contained foam ripples, flame sprites, and submerged wreck markers, distinct marked-cell fills, and the latest-shot border make
+coordinates and outcomes readable at both sizes. A single coaching line handles
+aiming, resolved cells, waiting, connection loss, and final accuracy; detailed
+controls live behind ?. SD's small friendly chart uses bright continuous tactical
+hulls with dark outlines instead of reducing detailed art until it disappears.
+Miss foam and hit flames have a slow, low-amplitude traveling highlight; marker
+footprints stay fixed. Solo shot handoff fades the outgoing cinematic to black
+and the incoming cinematic back in over two seconds, with no aiming modal.
+The fade cannot be skipped into an accidental shot; timed result reveal remains.
+Live shot cinematics are full-screen effects with one large pixel-art result:
+YOU MISSED! / THEY MISSED!, YOU HIT! / YOU WERE HIT!, or SUNK!.
+Only a sinking adds the ship name. Tactical headers, coordinates,
+instrument panels, shooter banners, and the control footer stay off the cutscene;
+Space/Enter still skips it. The lookdev showcase retains its instrumentation.
+
+Match endings have eight compositions across faction, victory/defeat, and margin.
+Close victories show a scarred surviving hull, smoke, fire, and floating debris.
+Overwhelming human victories have escorts and a formation flyover; overwhelming
+brood victories add spores and bioluminescent tendrils taking over the water.
+Defeats shift the camera to a sinking friendly wreck with the victor behind it;
+overwhelming defeats add multiple wrecks and the occupying fleet. Each has one
+short faction-specific joke, remaining winner HP, and mouse/keyboard rematch,
+chart review, menu, and quit controls. Endings start after the final shot resolves,
+and rematches reset their presentation state. No enemy placement is revealed.
+
+The overwhelming threshold is 9/17 unhit hull cells. A fixed-seed sample of 144
+bot matches (48 each: medium/medium, hard/medium, medium/easy) produced 7 such
+winners; this is calibration evidence, not a prediction of human win rates.
+`go run ./tools/result-eval` reproduces the comparison. `TestEightResultScenes`
+captures all eight endings at four animation times in both sizes when
+`SB2_CAPTURE_DIR` is set. Controller tests play actual winning shots from both
+perspectives, then verify final-cinematic gating, chart review, and rematch reset.
+Mouse press fires through the same authoritative gates as Enter; release,
+inspection, resolved cells, pending shots, and enemy turns cannot fire.
+`tools/combat_pty_review.py` exercises these interactions with real terminal mouse
+events for both factions at SD and HD. Renderer tests cover results, disconnection,
+help, chart focus, and concealment of enemy hulls.
+
+The ocean remains in motion during quiet intervals. Far events render behind the
+carrier; deck action renders in front; titles and controls render last. The black
+translucent control panel keeps plain white shortcut letters and centered quit.
+SD/HD follow terminal size automatically; `--size sd` supports deliberate review.
+
+For exact SD/HD story captures and optional SD motion frames:
+
+```sh
+SB2_CAPTURE_DIR=captures/random-stories SB2_MENU_MOTION=1 go test ./internal/visual -run 'TestIdleStoriesInContext|TestCarrierFlightReview|TestCaptureMenuMotion' -count=1
+```
