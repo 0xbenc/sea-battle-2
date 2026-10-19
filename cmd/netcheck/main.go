@@ -6,7 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"time"
 
 	"sea-battle-2/internal/game"
@@ -21,6 +24,8 @@ func run() error {
 	advertise := flag.String("advertise", "", "additional host:port route")
 	websocketPort := flag.Int("websocket-port", 0, "loopback tunnel port")
 	only := flag.String("only-route", "", "test only this invitation route")
+	directRoutes := flag.String("direct-routes", "", "diagnostic override: comma-separated direct endpoints")
+	noPublic := flag.Bool("no-public", false, "disable automatic public bootstrap")
 	mapping := flag.Bool("map", false, "test temporary router mappings")
 	via := flag.String("connect-address", "", "additional guest route")
 	timeout := flag.Duration("timeout", 90*time.Second, "overall deadline")
@@ -28,7 +33,10 @@ func run() error {
 	if *file == "" {
 		return fmt.Errorf("--invitation is required")
 	}
-	cfg := session.Config{Host: *host, Port: *port, Advertise: *advertise, NoMap: !*mapping, JoinAddress: *via, WebSocketPort: *websocketPort}
+	cfg := session.Config{Host: *host, Port: *port, Advertise: *advertise, NoMap: !*mapping, JoinAddress: *via, WebSocketPort: *websocketPort, AutoPublic: *host && !*noPublic && *websocketPort == 0}
+	if *directRoutes != "" {
+		cfg.DirectAddresses = strings.Split(*directRoutes, ",")
+	}
 	if !*host {
 		b, err := os.ReadFile(*file)
 		if err != nil {
@@ -47,7 +55,9 @@ func run() error {
 			}
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	parent, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	defer stopSignals()
+	ctx, cancel := context.WithTimeout(parent, *timeout)
 	defer cancel()
 	c := session.New(ctx)
 	defer c.Close()
@@ -86,11 +96,20 @@ func run() error {
 			invitationWritten = true
 			fmt.Printf("LISTEN port=%d routes=%v\n", e.Port, i.Addresses)
 		}
+		if e.Network != "" {
+			fmt.Printf("NETWORK state=%s notice=%s detail=%s\n", e.Network, e.Notice, e.Detail)
+		}
 		if e.Router != nil {
 			fmt.Printf("ROUTER state=%s protocol=%s address=%s notice=%s\n", e.Router.State, e.Router.Protocol, e.Router.Address, e.Router.Notice)
 		}
 		if e.State == session.Failed {
 			return fmt.Errorf("session failed: %s", e.Error)
+		}
+		if e.Message.Type == "negotiating" {
+			fmt.Printf("BOOTSTRAP transport=public route=%s\n", e.Message.Route)
+		}
+		if e.Message.Type == "route_failed" {
+			fmt.Printf("ROUTE_FAILED %s\n", e.Message.Error)
 		}
 		if e.Message.Type == "offline" {
 			fmt.Println(e.Message.Error)

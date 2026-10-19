@@ -1,5 +1,9 @@
 # Cross-network connection field test — 2026-10-19
 
+This is the original manual-launch field record. The normal game now owns setup
+and handoff; see [automatic connections](CONNECTION_NEGOTIATION.md) for current
+usage. The separate launcher described below is historical.
+
 Two real machines, in different US states: Linux/WSL2 and an Apple Silicon Mac
 running macOS. Starting source commit on both: `2b81d15c40d405433267d099e0a34b70cab74683`.
 Cloudflare connector version: `2026.10.1`. Tests used the actual `session.Controller`, pinned TLS handshake, invitation

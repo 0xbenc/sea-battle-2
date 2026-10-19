@@ -70,11 +70,14 @@ func dialPinned(ctx context.Context, addr, fingerprint string) (net.Conn, error)
 		d := tls.Dialer{NetDialer: &net.Dialer{}, Config: pinnedConfig(fingerprint)}
 		return d.DialContext(ctx, "tcp", addr)
 	}
+	return dialWebSocket(ctx, addr, fingerprint)
+}
+func dialWebSocket(ctx context.Context, addr, fingerprint string) (net.Conn, error) {
 	config, err := websocket.NewConfig(addr, "https://sea-battle.invalid")
 	if err != nil {
 		return nil, err
 	}
-	ws, err := config.DialContext(ctx)
+	ws, err := dialPublicWebSocket(ctx, config)
 	if err != nil {
 		return nil, err
 	}

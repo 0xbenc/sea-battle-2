@@ -89,7 +89,7 @@ var helpLines = []string{
 	"", "Single player: choose either navy and a bot difficulty.",
 	"Multiplayer: H hosts; send the invitation to your friend.",
 	"Your friend uses J to paste it. Keep the host running.",
-	"Across networks: try Tailscale, or the host can run",
-	"python3 tools/host-public.py for a public invitation.",
+	"Connection setup is automatic. Public or direct routes",
+	"are selected securely. No special launcher is needed.",
 	"", "ESC / ? back    Q quit",
 }

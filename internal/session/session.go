@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"sea-battle-2/internal/game"
 	"sea-battle-2/internal/netsetup"
 	"sea-battle-2/internal/peer"
+	"sea-battle-2/internal/tunnel"
 )
 
 type State string
@@ -43,6 +43,10 @@ type Config struct {
 	Port            int
 	WebSocketPort   int
 	NoMap           bool
+	AutoPublic      bool
+	// DirectAddresses optionally overrides interface discovery for diagnostics.
+	DirectAddresses []string
+	tunnelPort      int
 }
 type Event struct {
 	Generation uint64
@@ -54,6 +58,9 @@ type Event struct {
 	Invitation string
 	Router     *netsetup.Update
 	Error      string
+	Network    string
+	Notice     string
+	Detail     string
 }
 type operation struct {
 	generation uint64
@@ -70,6 +77,7 @@ type dependencies struct {
 	addresses func(int) []string
 	refresh   time.Duration
 	botDelay  time.Duration
+	tunnel    func(context.Context, int, func(string)) (tunnel.Handle, error)
 }
 type Controller struct {
 	mu         sync.Mutex
@@ -88,7 +96,7 @@ type Controller struct {
 func New(parent context.Context) *Controller {
 	ctx, cancel := context.WithCancel(parent)
 	return &Controller{ctx: ctx, cancel: cancel, events: make(chan Event, 64), state: Idle,
-		deps: dependencies{host: peer.Host, connect: peer.Connect, maintain: netsetup.Maintain, addresses: peer.LocalAddresses, refresh: 10 * time.Second, botDelay: 650 * time.Millisecond}}
+		deps: dependencies{host: peer.Host, connect: peer.Connect, maintain: netsetup.Maintain, addresses: peer.LocalAddresses, refresh: 10 * time.Second, botDelay: 650 * time.Millisecond, tunnel: tunnel.Start}}
 }
 func (c *Controller) Generation() uint64 { c.mu.Lock(); defer c.mu.Unlock(); return c.generation }
 func (c *Controller) State() State       { c.mu.Lock(); defer c.mu.Unlock(); return c.state }
@@ -280,18 +288,19 @@ func (c *Controller) run(op *operation, config Config) {
 		}
 		defer server.Close()
 		setup.Port = server.Port()
-		if config.WebSocketPort != 0 {
+		if config.WebSocketPort != 0 || config.AutoPublic {
 			l, listenErr := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(config.WebSocketPort)))
 			if listenErr != nil {
 				fail(listenErr)
 				return
 			}
+			config.tunnelPort = l.Addr().(*net.TCPAddr).Port
 			httpServer := &http.Server{Handler: server.WebSocketHandler(), ReadHeaderTimeout: 5 * time.Second}
 			done := make(chan struct{})
 			go func() { defer close(done); httpServer.Serve(l) }()
 			defer func() { httpServer.Close(); <-done }()
 		}
-		public, e := server.UpdateAddresses(routes(c.deps.addresses(server.Port()), config.Advertise, ""))
+		public, e := server.UpdateAddresses(routes(c.localAddresses(config, server.Port()), config.Advertise, ""))
 		if e != nil {
 			fail(e)
 			return
@@ -300,6 +309,9 @@ func (c *Controller) run(op *operation, config Config) {
 		if err != nil {
 			fail(err)
 			return
+		}
+		if config.AutoPublic {
+			setup.Invitation = ""
 		}
 		invite = server.LocalInvite()
 	} else {
@@ -390,72 +402,9 @@ func routes(local []string, manual, mapped string) []string {
 }
 func (e Event) String() string { return fmt.Sprintf("session %d: %s", e.Generation, e.State) }
 
-// Route discovery and invitation publication are serialized here. Refreshing
-// local interfaces also works with --no-map and while a router is unavailable.
-func (c *Controller) manageRoutes(op *operation, ctx context.Context, server *peer.Server, config Config) {
-	updates := make(chan netsetup.Update, 8)
-	var wg sync.WaitGroup
-	if !config.NoMap {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			c.deps.maintain(ctx, server.Port(), func(u netsetup.Update) {
-				select {
-				case updates <- u:
-				case <-ctx.Done():
-				}
-			})
-		}()
-	} else {
-		u := netsetup.Update{State: "unavailable", Notice: "Router mapping disabled. Using the invitation routes."}
-		c.publish(op, Event{Router: &u})
+func (c *Controller) localAddresses(config Config, port int) []string {
+	if config.DirectAddresses != nil {
+		return append([]string(nil), config.DirectAddresses...)
 	}
-	defer wg.Wait()
-	ticker := time.NewTicker(c.deps.refresh)
-	defer ticker.Stop()
-	mapped, last := "", ""
-	var expires time.Time
-	publish := func() {
-		if !expires.IsZero() && !time.Now().Before(expires) {
-			mapped = ""
-		}
-		current := strings.Join(routes(c.deps.addresses(server.Port()), config.Advertise, mapped), "\n")
-		if current == last {
-			return
-		}
-		invite, err := server.UpdateAddresses(strings.Split(current, "\n"))
-		if err != nil {
-			return
-		}
-		code, err := invite.Encode()
-		if err != nil {
-			return
-		}
-		last = current
-		c.publish(op, Event{Invitation: code})
-	}
-	publish()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			publish()
-		case u := <-updates:
-			if u.State == "active" && !u.Expires.IsZero() && !time.Now().Before(u.Expires) {
-				u.State = "unavailable"
-				u.Address = ""
-				u.Notice = "Router lease expired; waiting for a fresh route."
-			}
-			if u.State == "active" {
-				expires = u.Expires
-				mapped = u.Address
-			}
-			if u.State == "unavailable" {
-				mapped = ""
-			}
-			publish()
-			c.publish(op, Event{Router: &u})
-		}
-	}
+	return c.deps.addresses(port)
 }

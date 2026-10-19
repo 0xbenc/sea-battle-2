@@ -14,14 +14,14 @@ func decodeMessage(data []byte) (Message, error) {
 	}
 	switch m.Type {
 	case "state":
-		if !validView(m.View) {
+		if !validView(m.View) || (m.Transport != "" && m.Transport != "direct" && m.Transport != "public") {
 			return Message{}, errors.New("host sent invalid state")
 		}
 	case "invitation":
 		if m.Invitation == nil || m.Invitation.Validate() != nil {
 			return Message{}, errors.New("host sent invalid invitation")
 		}
-	case "error", "fatal", "pong":
+	case "error", "fatal", "pong", "probe_ok":
 	default:
 		return Message{}, errors.New("host sent an unknown message type")
 	}
@@ -42,7 +42,7 @@ func decodeCommand(data []byte) (Command, error) {
 		return c, errors.New("invalid command")
 	}
 	switch c.Type {
-	case "hello", "ping", "ready", "fire", "rematch":
+	case "hello", "ping", "ready", "fire", "rematch", "probe", "link_ready":
 		return c, nil
 	default:
 		return Command{}, errors.New("unknown command")

@@ -1,7 +1,6 @@
 package peer
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,6 +20,7 @@ type Client struct {
 	invite  Invitation
 	resume  string
 	route   string
+	dialer  func(context.Context, string, string) (net.Conn, error)
 	ctx     context.Context
 	cancel  context.CancelFunc
 	mu      sync.Mutex
@@ -38,6 +38,9 @@ func Connect(ctx context.Context, i Invitation) (*Client, error) {
 // ConnectVia keeps a caller-supplied route across host route updates and reconnects.
 // The invitation still supplies the pinned identity and seat credential.
 func ConnectVia(ctx context.Context, i Invitation, route string) (*Client, error) {
+	return connectWithDialer(ctx, i, route, dialPinned)
+}
+func connectWithDialer(ctx context.Context, i Invitation, route string, dialer func(context.Context, string, string) (net.Conn, error)) (*Client, error) {
 	if route != "" {
 		if err := ValidAddress(route); err != nil {
 			return nil, err
@@ -52,7 +55,7 @@ func ConnectVia(ctx context.Context, i Invitation, route string) (*Client, error
 	}
 	i.Addresses = append([]string(nil), i.Addresses...)
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Client{Updates: make(chan Message, 32), invite: i, resume: resume, route: route, ctx: ctx, cancel: cancel, done: make(chan struct{}), wake: make(chan struct{}, 1)}
+	c := &Client{Updates: make(chan Message, 32), invite: i, resume: resume, route: route, dialer: dialer, ctx: ctx, cancel: cancel, done: make(chan struct{}), wake: make(chan struct{}, 1)}
 	go c.run()
 	return c, nil
 }
@@ -96,7 +99,7 @@ func (c *Client) sendOn(conn net.Conn, cmd Command) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	c.mu.Lock()
-	valid := conn != nil && conn == c.conn && c.ctx.Err() == nil && (c.ready || cmd.Type == "hello" || cmd.Type == "ping")
+	valid := conn != nil && conn == c.conn && c.ctx.Err() == nil && (c.ready || cmd.Type == "hello" || cmd.Type == "ping" || cmd.Type == "link_ready")
 	c.mu.Unlock()
 	if !valid {
 		return errors.New("connection changed or is unavailable; wait for the current board")
@@ -113,6 +116,28 @@ func (c *Client) dial() (net.Conn, error) {
 	if c.route != "" {
 		invite.Addresses = append([]string{c.route}, invite.Addresses...)
 	}
+	// Public-first bootstrap. If unavailable, direct routes still work without it.
+	var public, direct []string
+	for _, addr := range invite.Addresses {
+		if strings.HasPrefix(addr, "wss://") {
+			public = append(public, addr)
+		} else {
+			direct = append(direct, addr)
+		}
+	}
+	if len(public) > 0 {
+		if conn, err := c.dialRoutes(public); err == nil {
+			return conn, nil
+		} else if len(direct) == 0 {
+			return nil, err
+		} else {
+			c.emit(Message{Type: "route_failed", Error: err.Error()})
+		}
+	}
+	return c.dialRoutes(direct)
+}
+func (c *Client) dialRoutes(addresses []string) (net.Conn, error) {
+	invite := c.Invitation()
 	ctx, cancel := context.WithTimeout(c.ctx, 6*time.Second)
 	defer cancel()
 	type result struct {
@@ -122,12 +147,12 @@ func (c *Client) dial() (net.Conn, error) {
 	}
 	results := make(chan result)
 	var wg sync.WaitGroup
-	for _, addr := range invite.Addresses {
+	for _, addr := range addresses {
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()
 			attempt, stop := context.WithTimeout(ctx, 5*time.Second)
-			conn, err := dialPinned(attempt, addr, invite.Fingerprint)
+			conn, err := c.dialTransport(attempt, addr, invite.Fingerprint)
 			stop()
 			select {
 			case results <- result{conn: conn, err: err, addr: addr}:
@@ -140,8 +165,8 @@ func (c *Client) dial() (net.Conn, error) {
 	}
 	// Wait for all dialers on every exit: no orphaned successful connections.
 	defer wg.Wait()
-	failures := make([]string, 0, len(invite.Addresses))
-	for range invite.Addresses {
+	failures := make([]string, 0, len(addresses))
+	for range addresses {
 		select {
 		case r := <-results:
 			if r.err == nil {
@@ -175,7 +200,7 @@ func (c *Client) run() {
 			c.conn = conn
 			c.ready = false
 			c.mu.Unlock()
-			err = c.Send(Command{Type: "hello", Version: Version, Token: c.Invitation().Token, Resume: c.resume})
+			err = c.Send(Command{Type: "hello", Version: Version, Token: c.Invitation().Token, Resume: c.resume, Negotiate: true})
 			if err == nil {
 				err = c.read(conn)
 			}
@@ -184,6 +209,9 @@ func (c *Client) run() {
 				delay = time.Second
 			}
 			c.ready = false
+			if c.conn != nil {
+				abortConn(c.conn)
+			}
 			c.conn = nil
 			abortConn(conn)
 			c.mu.Unlock()
@@ -219,16 +247,25 @@ func (c *Client) read(conn net.Conn) error {
 			case <-stop:
 				return
 			case <-c.ctx.Done():
-				abortConn(conn)
+				c.mu.Lock()
+				if c.conn != nil {
+					abortConn(c.conn)
+				}
+				c.mu.Unlock()
 				return
 			}
 		}
 	}()
 	defer func() { close(stop); <-done }()
-	sc := bufio.NewScanner(conn)
-	sc.Buffer(make([]byte, 4096), maxMessage)
+	sc := scanner(conn)
+	first := true
+	waitingConfirmation := false
 	for {
-		conn.SetReadDeadline(time.Now().Add(35 * time.Second))
+		timeout := 35 * time.Second
+		if first || waitingConfirmation {
+			timeout = 8 * time.Second
+		}
+		conn.SetReadDeadline(time.Now().Add(timeout))
 		if !sc.Scan() {
 			break
 		}
@@ -237,6 +274,35 @@ func (c *Client) read(conn net.Conn) error {
 			return err
 		}
 		if m.Type == "state" {
+			if waitingConfirmation {
+				if !m.Settled {
+					continue
+				}
+				if m.Transport != transport(conn) {
+					return errors.New("host confirmed a different transport")
+				}
+				waitingConfirmation = false
+			}
+			if first {
+				first = false
+				if m.Upgrade && publicConn(conn) {
+					c.emit(Message{Type: "negotiating", Transport: "public", Route: conn.RemoteAddr().String()})
+					upgraded, next, state, err := c.negotiate(conn)
+					if err != nil {
+						return err
+					}
+					if upgraded != nil {
+						conn, sc, m = upgraded, next, state
+					}
+				}
+				if m.Upgrade {
+					if err := c.Send(Command{Type: "link_ready"}); err != nil {
+						return err
+					}
+					waitingConfirmation = true
+					continue
+				}
+			}
 			c.mu.Lock()
 			c.ready = true
 			m.Route = conn.RemoteAddr().String()
@@ -326,4 +392,11 @@ func (c *Client) UpdateInvitation(i Invitation) error {
 		}
 	}
 	return nil
+}
+
+func (c *Client) dialTransport(ctx context.Context, addr, fp string) (net.Conn, error) {
+	if c.dialer != nil {
+		return c.dialer(ctx, addr, fp)
+	}
+	return dialPinned(ctx, addr, fp)
 }

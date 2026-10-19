@@ -246,6 +246,7 @@ func run() error {
 	advertise := flag.String("advertise", "", "additional reachable host:port for invitations")
 	websocketPort := flag.Int("websocket-port", 0, "optional loopback HTTP port for a public WebSocket tunnel")
 	joinAddress := flag.String("connect-address", "", "additional guest route (host:port); keeps invitation TLS identity")
+	noPublic := flag.Bool("no-public", false, "host using direct routes only; do not start a public connector")
 	noMap := flag.Bool("no-map", false, "disable automatic router mapping")
 
 	scene := flag.String("scene", "arrival", "scene ID; see --list")
@@ -326,7 +327,7 @@ func run() error {
 				return err
 			}
 		}
-		opts := play.Options{Solo: *solo, Host: *host, Join: *join, JoinAddress: *joinAddress, WebSocketPort: *websocketPort, Port: *port, Advertise: *advertise, NoMap: *noMap, SD: *size == "sd"}
+		opts := play.Options{Solo: *solo, Host: *host, Join: *join, JoinAddress: *joinAddress, WebSocketPort: *websocketPort, Port: *port, Advertise: *advertise, NoMap: *noMap, NoPublic: *noPublic, SD: *size == "sd"}
 		flag.Visit(func(f *flag.Flag) {
 			if f.Name == "difficulty" {
 				opts.Difficulty = bot.Difficulty(*difficulty)

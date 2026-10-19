@@ -189,5 +189,5 @@ func LocalAddresses(port int) []string {
 	return out
 }
 func ConnectionHelp(port int) string {
-	return fmt.Sprintf("Allow inbound TCP %d on the host. On different networks, try a shared VPN such as Tailscale (running inside WSL when hosting there). If automatic mapping is unavailable, forward TCP %d to this computer and add the router's public address. With upstream NAT/CGNAT, try the other player hosting or reachable IPv6. For a public tunnel, host with python3 tools/host-public.py.", port, port)
+	return fmt.Sprintf("Allow inbound TCP %d on the host. On different networks, try a shared VPN such as Tailscale (running inside WSL when hosting there). If automatic mapping is unavailable, forward TCP %d to this computer and add the router's public address. With upstream NAT/CGNAT, try the other player hosting or reachable IPv6. Normal hosting prepares a public connection automatically. If every route is lost, share the updated invitation.", port, port)
 }

@@ -42,16 +42,18 @@ Direct launch options:
 ./bin/sea-battle --host
 ./bin/sea-battle --join-file invitation.txt
 ./bin/sea-battle --host --port 4747 --advertise example.net:4747
-./bin/sea-battle --host --no-map       # LAN / IPv6 / manual setup only
+./bin/sea-battle --host --no-map       # skip router mapping; public setup still runs
+./bin/sea-battle --host --no-public    # direct routes only
 ./bin/sea-battle --lookdev            # original 40-scene art showcase
 ```
 
 
-For players on different networks without a shared VPN, the host can run
-`python3 tools/host-public.py` for an optional public tunnel, then share the
-normal full invitation. Only the host needs `cloudflared`; no Cloudflare account
-is used. The guest uses the usual Join menu. See [setup, privacy, limitations,
-and verified results](design/NETWORK_FIELD_TEST.md).
+**Host / Join handles connections automatically.** Hosting prepares a public
+invitation; after the guest connects, both games automatically negotiate a direct
+route. If one works, the host stops the public connector. Otherwise, the match
+continues through the public route. No special launcher, guest software, or
+Cloudflare account is needed. First-time hosts may briefly download a verified
+connection helper. See [automatic connections, privacy, and recovery](design/CONNECTION_NEGOTIATION.md).
 
 The default host port is **TCP 4747**; `--port 0` chooses an available port.
 `--advertise` adds a reachable endpoint to the invitation; it does not configure
@@ -59,12 +61,12 @@ a firewall or forward a port. With manual IPv4 setup, forward that external TCP
 port to the host's listening port and permit it through the host firewall.
 Global IPv6 still needs inbound firewall permission. A private router address or
 CGNAT may require upstream configuration, switching hosts, reachable IPv6, or
-playing on the same LAN. An optional public WebSocket tunnel is available when direct routes fail; see
-[the cross-network setup and field tests](design/NETWORK_FIELD_TEST.md).
+playing on the same LAN. The normal Host flow prepares a public route automatically; use `--no-public`
+when you want only direct routes.
 
 Invitations expire after 24 hours and contain a private bearer key plus the
-host certificate fingerprint. Keep them private. Clients try the supplied
-addresses directly using TLS 1.3 and exact certificate pinning. The host owns the
+host certificate fingerprint. Keep them private. Clients establish contact through the public route when available, then negotiate
+direct alternatives using TLS 1.3 and exact certificate pinning throughout. The host owns the
 rules and sends each player only their own fleet and confirmed shot information;
 an unsunk enemy hit reveals no ship identity. This is a trusted-friends game:
 the hosting process necessarily holds both fleets, so this is not an anti-cheat
@@ -119,7 +121,8 @@ failure scenarios, and validation evidence.
 Real WSL2 ↔ macOS matches have passed over Tailscale and an optional public
 WebSocket tunnel in both hosting directions. Router mapping was unavailable on
 these networks; native Windows and other router interoperability remain unproven.
-See [the field test record and launch instructions](design/NETWORK_FIELD_TEST.md).
+See [the original field tests](design/NETWORK_FIELD_TEST.md) and
+[automatic connection negotiation](design/CONNECTION_NEGOTIATION.md).
 
 The two teams use the same fleet lengths, with distinct ship identities. Team A
 is the original American fleet from `0xbenc/SeaBattle`; Team B is an alien naval
@@ -158,9 +161,9 @@ Art presentation follows these additive principles:
   stays classic Battleship.
 
 - **Multiplayer is directly player-hosted:** Host → copy invitation → Join/paste.
-  No accounts, friends system, rendezvous service, or required shared
-  infrastructure for direct play. An explicit public-tunnel launcher provides an
-  optional fallback through Cloudflare Quick Tunnels. Invitations carry connection details rather than referencing
+  No accounts or friends system. Normal hosting bootstraps through an anonymous
+  Cloudflare Quick Tunnel, then automatically retires it when a direct route is
+  confirmed. Direct-only operation remains available with `--no-public`. Invitations carry connection details rather than referencing
   a centrally stored game code.
 - **Minimize network setup, without promising universal connectivity:** automate
   local address discovery and router port mapping where supported; support LAN,

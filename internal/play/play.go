@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -30,6 +29,7 @@ type Options struct {
 	Port            int
 	WebSocketPort   int
 	NoMap, SD       bool
+	NoPublic        bool
 }
 type clockTick time.Time
 type sent struct {
@@ -49,6 +49,7 @@ type factionDeploy struct {
 }
 
 type Model struct {
+	connectionStatus                                 string
 	inspectOwn, combatHelp                           bool
 	resultCharts                                     bool
 	resultStart                                      float64
@@ -123,7 +124,7 @@ func (m Model) startSolo(human int) tea.Cmd {
 	return nil
 }
 func (m Model) startHost() tea.Cmd {
-	m.session.Start(session.Config{Host: true, Port: m.opts.Port, WebSocketPort: m.opts.WebSocketPort, Advertise: m.opts.Advertise, NoMap: m.opts.NoMap})
+	m.session.Start(session.Config{Host: true, Port: m.opts.Port, WebSocketPort: m.opts.WebSocketPort, Advertise: m.opts.Advertise, NoMap: m.opts.NoMap, AutoPublic: !m.opts.NoPublic && m.opts.WebSocketPort == 0 && !strings.HasPrefix(m.opts.Advertise, "wss://")})
 	return nil
 }
 func (m Model) startJoin(code string) tea.Cmd {
@@ -282,6 +283,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.invitation = false
 			m.invite = ""
 			m.routerStatus = ""
+			m.connectionStatus = ""
 			m.notice = ""
 			m.mode = "connecting"
 		}
@@ -299,6 +301,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = "Reconnect routes updated. I then C copies the current invitation."
 			}
 			m.invite = v.Invitation
+		}
+		if v.Notice != "" {
+			m.connectionStatus = v.Notice
 		}
 		if v.Router != nil {
 			m.routerStatus = v.Router.Notice
@@ -329,6 +334,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case peer.Message:
 		switch v.Type {
 		case "state":
+			if v.Settled {
+				if v.Transport == "direct" {
+					m.connectionStatus = "Connected directly."
+				} else if v.Transport == "public" {
+					m.connectionStatus = "Connected securely through the public connection."
+				}
+			}
 			previous := m.state
 			if v.View.Phase == "finished" && (previous == nil || previous.Phase != "finished") {
 				m.resultStart = m.t
@@ -398,6 +410,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.offline = true
 			m.pending = false
 			m.notice = "Link interrupted. Retrying automatically; J updates guest routes."
+		case "negotiating":
+			m.connectionStatus = "Finding the best connection…"
 		case "connecting":
 			m.offline = true
 		case "fatal":
@@ -628,9 +642,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc", "enter":
 				m.invitation = false
 			case "c":
+				if m.invite == "" {
+					m.notice = "Your invitation is still being prepared."
+					return m, nil
+				}
 				m.notice = "Clipboard requested (OSC52). S saves a file if unsupported."
 				return m, tea.SetClipboard(m.invite)
 			case "s":
+				if m.invite == "" {
+					m.notice = "Your invitation is still being prepared."
+					return m, nil
+				}
 				code := m.invite
 				return m, func() tea.Msg { return saved{saveInvitation(code)} }
 			}
@@ -761,13 +783,13 @@ func (m Model) View() tea.View {
 		}
 		f = m.front("JOIN THE BROOD", []string{"Paste the complete sb2: invitation.", "Wrapped invitations are accepted.", "", tail, "", fmt.Sprintf("%d characters", len(m.input)), "", "ENTER connect    BACKSPACE edit    ESC back", m.notice})
 	case m.invitation && m.host:
-		f = m.front("HOST INVITATION / KEEP PRIVATE", []string{
-			"C copy invitation    S save invitation.txt    ENTER deploy", "", m.routerStatus, "",
-			fmt.Sprintf("Private invitation: %d characters", len(m.invite)), m.invite[:min(50, len(m.invite))] + "...", "Use C or S for the COMPLETE invitation.", "", "TCP " + strconv.Itoa(m.port) + " / host must remain running",
-			"Manual: --host --advertise PUBLIC_IP:PORT (forward TCP).",
-			"Different networks: try Tailscale or the public-host launcher.", "", m.notice})
+		if m.invite == "" {
+			f = m.front("PREPARING YOUR INVITATION", []string{m.connectionStatus, "", "Connection setup is automatic.", "You can arrange your fleet while we get ready.", "", "ENTER arrange fleet    Q leave", m.notice})
+		} else {
+			f = m.front("INVITE YOUR FRIEND", []string{"C copy invitation    S save invitation.txt", "", m.connectionStatus, "", "Send the COMPLETE invitation privately.", "Your friend chooses Join, pastes it, and presses Enter.", "", "Keep this game running. Connection setup is automatic.", "", "ENTER arrange fleet    I reopen this screen", m.notice})
+		}
 	case m.state == nil:
-		f = m.front("ESTABLISHING COMMAND", []string{"Trying the invitation routes securely...", "", "Check that the host is still running and the invitation is current.", "For different networks, try a shared VPN such as Tailscale.", "Public alternative: host runs python3 tools/host-public.py", "Then share its new invitation. No guest account is needed.", "", "ESC back    Q quit", m.notice})
+		f = m.front("CONNECTING", []string{"Establishing a secure connection…", "", m.connectionStatus, "", "We will choose the best available route automatically.", "Keep the host's game running.", "", "ESC back    Q quit", m.notice})
 	default:
 		f = visual.RenderBattle(m.battlePresentation())
 	}

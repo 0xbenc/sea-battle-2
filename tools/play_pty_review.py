@@ -53,8 +53,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='sb2-pty-') as temp:
         temp=Path(temp)
         try:
-            a=Terminal(['--host','--no-map','--port','0'],temp);terminals.append(a)
-            check('HOST INVITATION' in a.read(1),'Host invitation screen')
+            a=Terminal(['--host','--no-map','--no-public','--port','0'],temp);terminals.append(a)
+            check('INVITE YOUR FRIEND' in a.read(1),'Host invitation screen')
             a.key('s');invite=(temp/'invitation.txt').read_text()
             check(invite.startswith('sb2:'),'Private invitation file')
             check((temp/'invitation.txt').stat().st_mode&0o777==0o600,'Invitation file permissions')

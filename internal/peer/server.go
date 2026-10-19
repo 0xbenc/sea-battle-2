@@ -18,26 +18,32 @@ import (
 const maxMessage = 64 * 1024
 
 type Command struct {
-	Type     string           `json:"type"`
-	Resume   string           `json:"resume,omitempty"`
-	Token    string           `json:"token,omitempty"`
-	Version  int              `json:"version,omitempty"`
-	Fleet    []game.Placement `json:"fleet,omitempty"`
-	At       game.Coord       `json:"at"`
-	Expected int              `json:"expected"`
-	Match    int              `json:"match"`
+	Type      string           `json:"type"`
+	Resume    string           `json:"resume,omitempty"`
+	Token     string           `json:"token,omitempty"`
+	Version   int              `json:"version,omitempty"`
+	Negotiate bool             `json:"negotiate,omitempty"`
+	Fleet     []game.Placement `json:"fleet,omitempty"`
+	At        game.Coord       `json:"at"`
+	Expected  int              `json:"expected"`
+	Match     int              `json:"match"`
 }
 type Message struct {
 	Invitation *Invitation `json:"invitation,omitempty"`
 	Type       string      `json:"type"`
 	Route      string      `json:"-"`
+	Transport  string      `json:"transport,omitempty"`
+	Settled    bool        `json:"settled,omitempty"`
+	Upgrade    bool        `json:"upgrade,omitempty"`
 	View       *game.View  `json:"view,omitempty"`
 	Error      string      `json:"error,omitempty"`
 }
 type subscriber struct {
-	conn   net.Conn
-	resume string
-	out    chan Message
+	conn      net.Conn
+	resume    string
+	confirmed bool
+	negotiate bool
+	out       chan Message
 }
 type Server struct {
 	listener          net.Listener
@@ -54,6 +60,7 @@ type Server struct {
 	admission         chan struct{}
 	connections       map[net.Conn]struct{}
 	invitation        *Invitation
+	linkChanges       chan struct{}
 }
 
 func Host(address string) (*Server, error) {
@@ -76,7 +83,7 @@ func Host(address string) (*Server, error) {
 	}
 	var coin [1]byte
 	rand.Read(coin[:])
-	s := &Server{listener: l, tlsConfig: tlsConfig, game: game.New(int(coin[0] % 2)), hostKey: hk, guestKey: gk, fingerprint: fp, expires: time.Now().Add(24 * time.Hour).Unix(), done: make(chan struct{}), admission: make(chan struct{}, 16), connections: make(map[net.Conn]struct{})}
+	s := &Server{listener: l, tlsConfig: tlsConfig, game: game.New(int(coin[0] % 2)), hostKey: hk, guestKey: gk, fingerprint: fp, expires: time.Now().Add(24 * time.Hour).Unix(), done: make(chan struct{}), admission: make(chan struct{}, 16), connections: make(map[net.Conn]struct{}), linkChanges: make(chan struct{}, 1)}
 	s.wg.Add(1)
 	go s.accept()
 	return s, nil
@@ -146,7 +153,7 @@ func (s *Server) serve(c net.Conn) {
 		return
 	}
 	hello, decodeErr := decodeCommand(scanner.Bytes())
-	if decodeErr != nil || hello.Type != "hello" || hello.Version != Version || len(hello.Resume) > 128 {
+	if decodeErr != nil || (hello.Type != "hello" && hello.Type != "probe") || hello.Version != Version || len(hello.Resume) > 128 {
 		return
 	}
 	player := -1
@@ -160,7 +167,27 @@ func (s *Server) serve(c net.Conn) {
 		json.NewEncoder(c).Encode(Message{Type: "fatal", Error: "Invitation key rejected or expired. Ask the host for the current invitation."})
 		return
 	}
-	sub := &subscriber{conn: c, resume: hello.Resume, out: make(chan Message, 8)}
+	if hello.Type == "probe" {
+		s.mu.Lock()
+		current := s.peers[player]
+		allowed := current != nil && hello.Resume != "" && subtle.ConstantTimeCompare([]byte(current.resume), []byte(hello.Resume)) == 1
+		s.mu.Unlock()
+		if !allowed {
+			return
+		}
+		if json.NewEncoder(c).Encode(Message{Type: "probe_ok"}) != nil {
+			return
+		}
+		if !scanner.Scan() {
+			return
+		}
+		activate, err := decodeCommand(scanner.Bytes())
+		if err != nil || activate.Type != "hello" || activate.Version != Version || activate.Token != hello.Token || activate.Resume != hello.Resume {
+			return
+		}
+		hello = activate
+	}
+	sub := &subscriber{conn: c, resume: hello.Resume, negotiate: hello.Negotiate, out: make(chan Message, 8)}
 	s.mu.Lock()
 	if old := s.peers[player]; old != nil {
 		// A reconnect from this same client instance may replace a half-open socket.
@@ -181,10 +208,17 @@ func (s *Server) serve(c net.Conn) {
 	default:
 	}
 	s.peers[player] = sub
+	if player == 1 {
+		s.signalLinkLocked()
+	}
 	if player == 1 && s.invitation != nil {
 		s.sendLocked(sub, Message{Type: "invitation", Invitation: s.invitation})
 	}
-	s.broadcastLocked()
+	if player == 1 && hello.Negotiate {
+		s.sendViewLocked(1)
+	} else {
+		s.broadcastLocked()
+	}
 	s.mu.Unlock()
 	c.SetDeadline(time.Time{})
 	writeDone := make(chan struct{})
@@ -228,6 +262,17 @@ func (s *Server) serve(c net.Conn) {
 			s.mu.Unlock()
 			break
 		}
+		if cmd.Type == "link_ready" {
+			if sub.negotiate && !sub.confirmed {
+				sub.confirmed = true
+				if player == 1 {
+					s.signalLinkLocked()
+				}
+				s.broadcastLocked()
+			}
+			s.mu.Unlock()
+			continue
+		}
 		var err error
 		if cmd.Match != s.game.Match {
 			err = errors.New("match changed; wait for the current board")
@@ -258,6 +303,9 @@ func (s *Server) serve(c net.Conn) {
 	s.mu.Lock()
 	if s.peers[player] == sub {
 		s.peers[player] = nil
+		if player == 1 {
+			s.signalLinkLocked()
+		}
 		s.broadcastLocked()
 	}
 	s.mu.Unlock()
@@ -280,7 +328,12 @@ func (s *Server) sendViewLocked(player int) {
 	}
 	v := s.game.View(player)
 	v.Connected = [2]bool{s.peers[0] != nil, s.peers[1] != nil}
-	s.sendLocked(p, Message{Type: "state", View: &v})
+	mode, settled := "", false
+	if guest := s.peers[1]; guest != nil {
+		mode = transport(guest.conn)
+		settled = guest.confirmed
+	}
+	s.sendLocked(p, Message{Type: "state", View: &v, Transport: mode, Settled: settled, Upgrade: p.negotiate && player == 1})
 }
 func (s *Server) broadcastLocked() { s.sendViewLocked(0); s.sendViewLocked(1) }
 
@@ -300,4 +353,21 @@ func (s *Server) UpdateAddresses(addresses []string) (Invitation, error) {
 		s.sendLocked(p, Message{Type: "invitation", Invitation: &stored})
 	}
 	return i, nil
+}
+
+// GuestLink reports server-observed transport, never a client's untrusted claim.
+func (s *Server) GuestLink() (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p := s.peers[1]; p != nil {
+		return transport(p.conn), p.confirmed
+	}
+	return "", false
+}
+func (s *Server) LinkChanges() <-chan struct{} { return s.linkChanges }
+func (s *Server) signalLinkLocked() {
+	select {
+	case s.linkChanges <- struct{}{}:
+	default:
+	}
 }
